@@ -1,5 +1,5 @@
 const SUPABASE_URL = "https://fxxiuhxqlzgkylvdkpua.supabase.co";
-const SUPABASE_KEY = "sb_publishable_PANCHITOS$$$88";
+const SUPABASE_KEY = "sb_publishable_hB38kKYOYDXejmsLH5zV1A_AjhWutWm";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const MARCA_NO_PIDO = "NO_PIDO";
