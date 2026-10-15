@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GM Catering</title>
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- ICONO -->
+  <link rel="icon" href="Imagenes/icono_buffet.png" type="image/png">
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-izq" onclick="volverInicio()">
+    <!-- Usamos tu nuevo logo oficial -->
+    <img src="Imagenes/Icono_buffet.png" class="logo-principal" alt="GM Catering Logo">
+    <span class="nombre-marca">GM Catering</span>
+  </div>
+
+  <div class="header-der">
+    <button onclick="verHistorial()">📄</button>
+    <button onclick="verAgenda()">📅</button>
+  </div>
+</div>
+
+<!-- COLEGIOS -->
+<div id="pantalla-colegios" class="pantalla">
+  <h2>Seleccionar Colegio</h2>
+  <div id="lista-colegios"></div>
+</div>
+
+<!-- PROVEEDORES -->
+<div id="pantalla-proveedores" class="pantalla" style="display:none;">
+  <div class="sticky-nav">
+    <button onclick="volverColegios()">← Volver</button>
+  </div>
+  
+  <h2 id="titulo-colegio"></h2>
+  <div id="lista-proveedores"></div>
+</div>
+
+<!-- PRODUCTOS -->
+<div id="pantalla-productos" class="pantalla" style="display:none;">
+  <div class="sticky-nav">
+    <button onclick="volverProveedores()">← Volver</button>
+  </div>
+  
+  <h2 id="titulo-proveedor"></h2>
+  <div id="productos"></div>
+  <button onclick="irCarrito()">Ir al carrito</button>
+</div>
+
+<!-- CARRITO -->
+<div id="pantalla-carrito" class="pantalla" style="display:none;">
+  <div class="sticky-nav">
+    <button onclick="volverProductos()">← Volver</button>
+  </div>
+ 
+  <h2>Carrito</h2>
+  <ul id="carrito"></ul>
+  <button onclick="copiarPedido()">Copiar Pedido</button>
+</div>
+
+<!-- HISTORIAL -->
+<div id="pantalla-historial" class="pantalla" style="display:none;">
+  <div class="sticky-nav">
+    <button onclick="volverInicio()">← Volver</button>
+  </div>
+  
+  <h2>Historial</h2>
+  <ul id="historial"></ul>
+</div>
+
+<!-- AGENDA -->
+<div id="pantalla-agenda" class="pantalla" style="display:none;">
+  <div class="sticky-nav">
+    <button onclick="volverInicio()">← Volver</button>
+  </div>
+  
+  <h2>Agenda</h2>
+  <div id="agenda"></div>
+</div>
+
+<!-- BOTÓN FLOTANTE -->
+<button class="carrito-fijo" onclick="irCarrito()">🛒</button>
+
+<div id="toast" class="toast"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
