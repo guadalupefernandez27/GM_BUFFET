@@ -1,4 +1,4 @@
-const SUPABASE_URL = "https://GM_BUFFET's Project.supabase.co";
+const SUPABASE_URL = "https://fxxiuhxqlzgkylvdkpua.supabase.co";
 const SUPABASE_KEY = "sb_publishable_PANCHITOS$$$88";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
