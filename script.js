@@ -1,6 +1,110 @@
+// ─────────────────────────────────────────
+// 0. SUPABASE (conexión, login y guardado)
+// ─────────────────────────────────────────
+
 const SUPABASE_URL = "https://fxxiuhxqlzgkylvdkpua.supabase.co";
-const SUPABASE_KEY = "sb_publishable_hB38kKYOYDXejmsLH5zV1A_AjhWutWm";
+const SUPABASE_KEY = "PEGA_AQUI_TU_PUBLISHABLE_KEY"; // la que empieza con sb_publishable_
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let usuarioActual = null;  // { id, email, nombre, rol }
+let pedidosHoy = [];       // filas de hoy (todos los colegios)
+
+function hoyArgentina() {
+  // Fecha de hoy en formato AAAA-MM-DD, hora de Buenos Aires
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+}
+
+async function iniciarSesion() {
+  const email = document.getElementById("login-email").value.trim();
+  const clave = document.getElementById("login-clave").value;
+  const err   = document.getElementById("login-error");
+  err.innerText = "";
+  if (!email || !clave) { err.innerText = "Completá email y contraseña"; return; }
+
+  const { error } = await db.auth.signInWithPassword({ email, password: clave });
+  if (error) {
+    err.innerText = error.message.includes("Invalid login")
+      ? "Email o contraseña incorrectos"
+      : "Error: " + error.message;
+    return;
+  }
+  document.getElementById("login-clave").value = "";
+  await arrancar();
+}
+
+async function cerrarSesion() {
+  await db.auth.signOut();
+  usuarioActual = null;
+  colegioActual = null;
+  proveedorActual = null;
+  pedidos = {};
+  historial = [];
+  proveedoresPedidos = {};
+  pedidosHoy = [];
+  document.getElementById("header-der").style.display = "none";
+  mostrarPantalla("pantalla-login");
+}
+
+// Trae de Supabase los pedidos de hoy y reconstruye el historial
+async function traerPedidosDeHoy() {
+  const { data, error } = await db.from("pedidos_enviados").select("*").eq("fecha", hoyArgentina());
+  if (error) {
+    console.error(error);
+    mostrarToast("⚠️ No se pudieron cargar los pedidos");
+    return;
+  }
+  pedidosHoy = data;
+  historial = data.map(r => ({
+    colegio:   (colegios.find(c => c.id === r.colegio_id)?.nombre || r.colegio_id).toUpperCase(),
+    proveedor: proveedoresComunes.find(p => p.id === r.proveedor_id)?.nombre || r.proveedor_id.toUpperCase(),
+    contenido: r.contenido
+  }));
+}
+
+// Marca en pantalla qué proveedores ya se pidieron / "no pido" en el colegio actual
+function aplicarEstadoColegio() {
+  pedidos = {};
+  proveedoresPedidos = {};
+  pedidosHoy.filter(r => r.colegio_id === colegioActual).forEach(r => {
+    if (r.estado === "no_pido") pedidos[r.proveedor_id] = [MARCA_NO_PIDO];
+    else proveedoresPedidos[r.proveedor_id] = true;
+  });
+}
+
+// Guarda (o reemplaza) el pedido de hoy de este colegio + proveedor
+async function guardarPedido(estado, texto) {
+  const { error } = await db.from("pedidos_enviados").upsert({
+    fecha:        hoyArgentina(),
+    colegio_id:   colegioActual,
+    proveedor_id: proveedorActual,
+    estado:       estado,
+    contenido:    texto,
+    user_id:      usuarioActual.id
+  }, { onConflict: "fecha,colegio_id,proveedor_id" });
+  if (error) {
+    console.error(error);
+    return false;
+  }
+  return true;
+}
+
+// Punto de entrada: ve si hay sesión iniciada
+async function arrancar() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) { mostrarPantalla("pantalla-login"); return; }
+
+  const { data: perfil } = await db.from("perfiles").select("*").eq("id", session.user.id).single();
+  usuarioActual = {
+    id:     session.user.id,
+    email:  session.user.email,
+    nombre: perfil?.nombre || null,
+    rol:    perfil?.rol || "usuario"
+  };
+
+  document.getElementById("header-der").style.display = "";
+  renderColegios();
+  mostrarPantalla("pantalla-colegios");
+}
 
 const MARCA_NO_PIDO = "NO_PIDO";
 let colegioActual = null;
@@ -574,9 +678,11 @@ function renderColegios() {
   });
 }
 
-function seleccionarColegio(id) {
+async function seleccionarColegio(id) {
   colegioActual = id;
   document.getElementById("titulo-colegio").innerText = colegios.find(c => c.id === id).nombre;
+  await traerPedidosDeHoy();
+  aplicarEstadoColegio();
   renderProveedores();
   mostrarPantalla("pantalla-proveedores");
 }
@@ -751,16 +857,17 @@ function agregarTodoDulce() {
 // 7. NO PIDO
 // ─────────────────────────────────────────
 
-function marcarNoPido() {
-  pedidos[proveedorActual] = [MARCA_NO_PIDO];
-
-  // Guardar en historial
+async function marcarNoPido() {
   const colNom  = colegios.find(c => c.id === colegioActual).nombre.toUpperCase();
   const provNom = proveedoresComunes.find(p => p.id === proveedorActual)?.nombre || proveedorActual.toUpperCase();
   const texto   = `*${colNom}*\n\n*${provNom}*\n\nNO PIDO`;
-  const idx = historial.findIndex(h => h.colegio === colNom && h.proveedor === provNom);
-  if (idx >= 0) historial[idx] = { colegio: colNom, proveedor: provNom, contenido: texto };
-  else historial.push({ colegio: colNom, proveedor: provNom, contenido: texto });
+
+  // Guardar en Supabase
+  const guardado = await guardarPedido("no_pido", texto);
+  if (!guardado) return mostrarToast("⚠️ No se pudo guardar. Probá de nuevo");
+
+  pedidos[proveedorActual] = [MARCA_NO_PIDO];
+  await traerPedidosDeHoy();
 
   // Copiar al portapapeles
   const done = () => {
@@ -918,19 +1025,22 @@ function _copiarFallback(texto, colNom, provNom) {
   document.body.removeChild(ta);
 }
 
-function _pedidoCopiado(colNom, provNom, texto) {
-  const idx = historial.findIndex(h => h.colegio === colNom && h.proveedor === provNom);
-  if (idx >= 0) historial[idx] = { colegio: colNom, proveedor: provNom, contenido: texto };
-  else historial.push({ colegio: colNom, proveedor: provNom, contenido: texto });
+async function _pedidoCopiado(colNom, provNom, texto) {
+  const esNoPido = (pedidos[proveedorActual] || [])[0] === MARCA_NO_PIDO;
+  const guardado = await guardarPedido(esNoPido ? "no_pido" : "pedido", texto);
 
-  proveedoresPedidos[proveedorActual] = true;
-
-  if ((pedidos[proveedorActual] || [])[0] !== MARCA_NO_PIDO) {
-    pedidos[proveedorActual] = [];
+  if (!guardado) {
+    // Se copió al portapapeles pero NO se guardó: dejamos el carrito para reintentar
+    mostrarToast("⚠️ Copiado, pero NO se guardó. Probá de nuevo");
+    return;
   }
 
-  mostrarToast("✅ ¡Copiado! Pegalo en WhatsApp 📋");
-  setTimeout(() => volverInicio(), 2000); // ← más tiempo para leer el toast
+  proveedoresPedidos[proveedorActual] = true;
+  if (!esNoPido) pedidos[proveedorActual] = [];
+  await traerPedidosDeHoy();
+
+  mostrarToast("✅ ¡Copiado y guardado! Pegalo en WhatsApp 📋");
+  setTimeout(() => volverInicio(), 2000);
 }
 
 // ─────────────────────────────────────────
@@ -963,7 +1073,8 @@ function agregarProducto(nombre, id, event) {
 // 11. HISTORIAL
 // ─────────────────────────────────────────
 
-function verHistorial() {
+async function verHistorial() {
+  await traerPedidosDeHoy();
   const cont = document.getElementById("historial");
   cont.innerHTML = "";
   if (historial.length === 0) {
@@ -1082,4 +1193,4 @@ function mostrarToast(msg) {
 // ─────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────
-renderColegios();
+arrancar();
