@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────
 
 const SUPABASE_URL = "https://fxxiuhxqlzgkylvdkpua.supabase.co";
-const SUPABASE_KEY = "PEGA_AQUI_TU_PUBLISHABLE_KEY"; // la que empieza con sb_publishable_
+const SUPABASE_KEY = "sb_publishable_hB38kKYOYDXejmsLH5zV1A_AjhWutWm"; // la que empieza con sb_publishable_
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let usuarioActual = null;  // { id, email, nombre, rol }
