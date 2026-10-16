@@ -41,6 +41,7 @@ async function iniciarSesion(e) {
 }
 
 async function cerrarSesion() {
+  if (!confirm("¿Querés cerrar sesión?")) return;
   await db.auth.signOut();
   document.getElementById("login-clave").value = "";
   usuarioActual = null;
@@ -62,14 +63,19 @@ async function traerPedidosDeHoy() {
     mostrarToast("⚠️ No se pudieron cargar los pedidos");
     return;
   }
-  pedidosHoy = data;
-  historial = data.map(r => ({
+  // Más reciente primero (por la última modificación)
+  const ordenados = [...data].sort((a, b) =>
+    new Date(b.actualizado_en || b.created_at) - new Date(a.actualizado_en || a.created_at));
+  pedidosHoy = ordenados;
+  historial = ordenados.map(r => ({
     colegio:   (colegios.find(c => c.id === r.colegio_id)?.nombre || r.colegio_id).toUpperCase(),
     proveedor: proveedoresComunes.find(p => p.id === r.proveedor_id)?.nombre || r.proveedor_id.toUpperCase(),
     contenido: r.contenido,
+    modificado: !!(r.actualizado_en && r.created_at &&
+                   Math.abs(new Date(r.actualizado_en) - new Date(r.created_at)) > 60000),
     usuario:   r.usuario_email || null,
     hora:      r.actualizado_en
-      ? new Date(r.actualizado_en).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })
+      ? new Date(r.actualizado_en).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })
       : ""
   }));
 }
@@ -660,6 +666,25 @@ function mostrarPantalla(id) {
   document.querySelectorAll(".pantalla").forEach(p => p.style.display = "none");
   document.getElementById(id).style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
+  actualizarBarraCarrito();
+  const pestanas = { "pantalla-historial": "btn-historial", "pantalla-agenda": "btn-agenda" };
+  ["btn-historial", "btn-agenda"].forEach(b => {
+    const el = document.getElementById(b);
+    if (el) el.classList.toggle("activo", pestanas[id] === b);
+  });
+}
+
+// Barra fija abajo: "Ver carrito (N productos)", visible solo dentro de un proveedor con productos
+function actualizarBarraCarrito() {
+  const barra = document.getElementById("barra-carrito");
+  if (!barra) return;
+  const items = pedidos[proveedorActual] || [];
+  const n = items[0] === MARCA_NO_PIDO ? 0 : items.length;
+  const enProductos = document.getElementById("pantalla-productos").style.display === "block";
+  const visible = enProductos && n > 0;
+  barra.style.display = visible ? "flex" : "none";
+  document.body.classList.toggle("con-barra", visible);
+  document.getElementById("barra-cant").innerText = n + (n === 1 ? " producto" : " productos");
 }
 function volverInicio()      { mostrarPantalla("pantalla-colegios"); }
 function volverColegios()    { mostrarPantalla("pantalla-colegios"); }
@@ -703,47 +728,149 @@ async function seleccionarColegio(id) {
 // 5. RENDER PROVEEDORES
 // ─────────────────────────────────────────
 
-function _estadoProveedor(id) {
+const DIAS_CLAVE  = ["domingo","lunes","martes","miercoles","jueves","viernes","sabado"];
+const DIAS_NOMBRE = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+
+// Día de la semana (0 = domingo) en hora de Buenos Aires
+function diaHoyIndice() {
+  const en = new Date().toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Argentina/Buenos_Aires" });
+  return ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].indexOf(en);
+}
+
+// Nombres de la agenda -> ids de proveedor (sin repetir)
+function _idsDeAgenda(nombres) {
+  const ids = [];
+  (nombres || []).forEach(n => {
+    const id = agendaAProveedorId[n];
+    if (id && !ids.includes(id)) ids.push(id);
+  });
+  return ids;
+}
+
+// falta | encarrito | pedido | nopido
+function _estadoVisual(id) {
   const items = pedidos[id] || [];
   if (items[0] === MARCA_NO_PIDO) return "nopido";
-  if (items.length > 0) return "pedido";          // tiene items en carrito
-  if (proveedoresPedidos[id]) return "pedido";    // ya copió el pedido antes
-  return "vacio";
+  if (items.length > 0) return "encarrito";
+  if (proveedoresPedidos[id]) return "pedido";
+  return "falta";
+}
+
+function _horaCorta(iso) {
+  return iso
+    ? new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })
+    : "";
+}
+
+function _nombreProveedor(id) {
+  return proveedoresComunes.find(p => p.id === id)?.nombre || id.toUpperCase();
+}
+
+function _tarjetaProveedor(id, esDeHoy) {
+  const estado = _estadoVisual(id);
+  const nombre = escaparHTML(_nombreProveedor(id));
+  const div = document.createElement("div");
+
+  // Ya resuelto: tarjeta compacta, verde (pedido) o roja (no pido)
+  if (estado === "pedido" || estado === "nopido") {
+    const fila  = pedidosHoy.find(r => r.colegio_id === colegioActual && r.proveedor_id === id);
+    const quien = fila && fila.usuario_email
+      ? `👤 ${escaparHTML(fila.usuario_email)}${fila.actualizado_en ? " · " + _horaCorta(fila.actualizado_en) : ""}`
+      : "";
+    const esNo = estado === "nopido";
+    div.className = "proveedor proveedor-listo " + (esNo ? "nopido" : "ok");
+    div.innerHTML = `
+      <div class="prov-fila">
+        <h3>${esNo ? "🚫" : "✅"} ${nombre}</h3>
+        <span class="badge-estado ${esNo ? "badge-nopido" : "badge-pedido"}">${esNo ? "NO PIDO" : "Pedido"}</span>
+      </div>
+      ${quien ? `<div class="prov-quien">${quien}</div>` : ""}
+      <button class="btn-chico" onclick="seleccionarProveedor('${id}')">Ver</button>`;
+    return div;
+  }
+
+  // Pendiente (falta pedir, o con productos en el carrito sin enviar)
+  const enCarrito = estado === "encarrito";
+  const cant = (pedidos[id] || []).length;
+  let badge = "";
+  if (enCarrito)    badge = `<span class="badge-estado badge-falta">En carrito (${cant})</span>`;
+  else if (esDeHoy) badge = `<span class="badge-estado badge-falta">Falta pedir</span>`;
+
+  div.className = "proveedor" + (esDeHoy ? " proveedor-hoy" : "");
+  div.innerHTML = `
+    <div class="prov-fila">
+      <h3>${nombre}</h3>
+      ${badge}
+    </div>
+    <button class="btn-entrar" onclick="seleccionarProveedor('${id}')">${enCarrito ? "Seguir pedido" : "Entrar"}</button>`;
+  return div;
+}
+
+function _tituloGrupo(cont, texto) {
+  const t = document.createElement("div");
+  t.className = "grupo-titulo";
+  t.innerText = texto;
+  cont.appendChild(t);
+}
+
+function _grupoPlegable(cont, titulo, ids, abierto) {
+  if (!ids.length) return;
+  const det = document.createElement("details");
+  det.className = "grupo";
+  if (abierto) det.open = true;
+  det.innerHTML = `<summary>${titulo} (${ids.length})</summary>`;
+  const caja = document.createElement("div");
+  caja.className = "contenido";
+  ids.forEach(id => caja.appendChild(_tarjetaProveedor(id, false)));
+  det.appendChild(caja);
+  cont.appendChild(det);
 }
 
 function renderProveedores() {
-  let cont = document.getElementById("lista-proveedores");
+  const cont = document.getElementById("lista-proveedores");
   cont.innerHTML = "";
-  const hoy = new Date().getDay();
-  const idPrioritario = agendaPrioridades[colegioActual]?.[hoy];
 
-  proveedoresPorColegio[colegioActual].forEach(p => {
-    const esPrioritario = p.id === idPrioritario;
-    const estado = _estadoProveedor(p.id);
-    const quien  = estado ? quienPidio(colegioActual, p.id) : null;
+  const idx     = diaHoyIndice();
+  const agenda  = agendasEscolares[colegioActual] || {};
+  const todos   = proveedoresPorColegio[colegioActual].map(p => p.id);
 
-    let borderColor = "";
-    let badge = "";
-    if (estado === "nopido") {
-      borderColor = "border-left:5px solid #e00;";
-      badge = `<span class="badge-estado badge-nopido">🚫 NO PIDO</span>`;
-    } else if (estado === "pedido") {
-      borderColor = "border-left:5px solid #4CAF50;";
-      badge = `<span class="badge-estado badge-pedido">✅ Pedido</span>`;
-    }
+  const hoyIds    = _idsDeAgenda(agenda[DIAS_CLAVE[idx]]).filter(id => todos.includes(id));
+  const sinDiaIds = _idsDeAgenda(agenda.sin_dia).filter(id => todos.includes(id) && !hoyIds.includes(id));
+  const otrosIds  = todos.filter(id => !hoyIds.includes(id) && !sinDiaIds.includes(id));
 
-    let div = document.createElement("div");
-    div.className = "proveedor";
-    div.setAttribute("style", borderColor);
-    div.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <h3 style="margin:0;">${esPrioritario ? p.nombre + " 🕑" : p.nombre}</h3>
-        ${badge}
-      </div>
-      ${quien ? `<div style="font-size:0.78rem;color:#777;margin-bottom:8px;">👤 ${escaparHTML(quien)}</div>` : ""}
-      <button onclick="seleccionarProveedor('${p.id}')">Entrar</button>`;
-    cont.appendChild(div);
-  });
+  const esResuelto = id => ["pedido", "nopido"].includes(_estadoVisual(id));
+
+  // Resumen del día
+  const resumen = document.createElement("div");
+  resumen.className = "hoy-resumen";
+  if (hoyIds.length === 0) {
+    resumen.innerHTML = `<div class="hoy-dia">${DIAS_NOMBRE[idx]} · hoy no hay pedidos programados</div>`;
+  } else {
+    const resueltos = hoyIds.filter(esResuelto).length;
+    const completo  = resueltos === hoyIds.length;
+    const pct = Math.round(resueltos / hoyIds.length * 100);
+    resumen.innerHTML = `
+      <div class="hoy-dia">${DIAS_NOMBRE[idx]} · hoy se pide</div>
+      <div class="hoy-barra ${completo ? "completa" : ""}"><div style="width:${pct}%"></div></div>
+      <div class="hoy-texto">${completo ? "✅ Todo resuelto por hoy" : `${resueltos} de ${hoyIds.length} pedidos listos`}</div>`;
+  }
+  cont.appendChild(resumen);
+
+  // Lo de hoy: primero lo que falta, después lo ya resuelto
+  const pendientes = hoyIds.filter(id => !esResuelto(id));
+  const hechos     = hoyIds.filter(esResuelto);
+  if (pendientes.length) {
+    _tituloGrupo(cont, "Falta pedir");
+    pendientes.forEach(id => cont.appendChild(_tarjetaProveedor(id, true)));
+  }
+  if (hechos.length) {
+    _tituloGrupo(cont, "Ya resueltos");
+    hechos.forEach(id => cont.appendChild(_tarjetaProveedor(id, true)));
+  }
+
+  // El resto, plegado (abierto solo si hoy no hay nada programado)
+  _grupoPlegable(cont, "Sin día fijo", sinDiaIds, false);
+  _grupoPlegable(cont, "Otros proveedores", otrosIds, hoyIds.length === 0);
 }
 
 function seleccionarProveedor(id) {
@@ -762,6 +889,7 @@ function seleccionarProveedor(id) {
 function renderProductos() {
   let cont = document.getElementById("productos");
   cont.innerHTML = "";
+  actualizarBarraCarrito();
 
   const itemsActuales = pedidos[proveedorActual] || [];
   const esNoPido = itemsActuales[0] === MARCA_NO_PIDO;
@@ -865,6 +993,7 @@ function agregarTodoDulce() {
   document.getElementById("td_unidad").value   = "";
 
   mostrarToast("Agregado ✅");
+  actualizarBarraCarrito();
 }
 
 // ─────────────────────────────────────────
@@ -1081,6 +1210,7 @@ function agregarProducto(nombre, id, event) {
   event.target.innerText = "✅ Agregado";
   document.querySelectorAll(`[id*='-${id}']`).forEach(i => i.value = "");
   mostrarToast("Agregado ✅");
+  actualizarBarraCarrito();
 }
 
 // ─────────────────────────────────────────
@@ -1104,7 +1234,7 @@ async function verHistorial() {
       li.style.cssText = "flex-direction:column;align-items:flex-start;gap:6px;";
       li.innerHTML = `
         <strong style="font-size:0.95rem;">${p.colegio} — ${p.proveedor}</strong>
-        ${p.usuario ? `<span style="font-size:0.78rem;color:#777;">👤 ${escaparHTML(p.usuario)}${p.hora ? " · " + p.hora : ""}</span>` : ""}
+        ${p.usuario ? `<span style="font-size:0.78rem;color:#777;">👤 ${escaparHTML(p.usuario)}${p.hora ? " · " + p.hora : ""}${p.modificado ? " (modificado)" : ""}</span>` : ""}
         <div style="padding:6px 10px;background:#f5f5f5;border-radius:6px;width:100%;">${itemsHTML}</div>`;
       cont.appendChild(li);
     });

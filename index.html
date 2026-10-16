@@ -3,7 +3,7 @@
 <head>
   <title>GM Catering</title>
   
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <link rel="stylesheet" href="style.css">
 
   <!-- ICONO -->
@@ -20,9 +20,9 @@
   </div>
 
   <div class="header-der" id="header-der" style="display:none;">
-    <button onclick="verHistorial()">📄</button>
-    <button onclick="verAgenda()">📅</button>
-    <button onclick="cerrarSesion()" title="Cerrar sesión">🚪</button>
+    <button id="btn-historial" onclick="verHistorial()" aria-label="Historial de pedidos de hoy"><span class="ico">📄</span><span class="lbl">Historial</span></button>
+    <button id="btn-agenda" onclick="verAgenda()" aria-label="Agenda semanal"><span class="ico">📅</span><span class="lbl">Agenda</span></button>
+    <button onclick="cerrarSesion()" aria-label="Cerrar sesión"><span class="ico">🚪</span><span class="lbl">Salir</span></button>
   </div>
 </div>
 
@@ -64,7 +64,6 @@
   
   <h2 id="titulo-proveedor"></h2>
   <div id="productos"></div>
-  <button onclick="irCarrito()">Ir al carrito</button>
 </div>
 
 <!-- CARRITO -->
@@ -98,8 +97,11 @@
   <div id="agenda"></div>
 </div>
 
-<!-- BOTÓN FLOTANTE -->
-<button class="carrito-fijo" onclick="irCarrito()">🛒</button>
+<!-- BARRA DE CARRITO (fija abajo) -->
+<div id="barra-carrito" class="barra-carrito" role="button" tabindex="0" onclick="irCarrito()">
+  <span>🛒 Ver carrito <span id="barra-cant" class="cant">0 productos</span></span>
+  <span>→</span>
+</div>
 
 <div id="toast" class="toast"></div>
 

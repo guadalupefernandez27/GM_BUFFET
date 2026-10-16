@@ -195,3 +195,70 @@ li button { width: auto; padding: 5px 10px; }
 }
 .badge-pedido { background: #eaffea; color: #2a7a2a; border: 1px solid #4CAF50; }
 .badge-nopido { background: #ffeaea; color: #b00;    border: 1px solid #e00; }
+
+/* ═══════════════════════════════════════
+   PANTALLA DE COLEGIO: "HOY SE PIDE"
+   ═══════════════════════════════════════ */
+.hoy-resumen { text-align: center; margin-bottom: 16px; }
+.hoy-dia   { color: #555; font-size: 0.9rem; margin-bottom: 8px; }
+.hoy-barra { background: #ddd; border-radius: 4px; height: 8px; overflow: hidden; }
+.hoy-barra div { height: 100%; background: #ff6a00; transition: width 0.3s; }
+.hoy-barra.completa div { background: #4CAF50; }
+.hoy-texto { color: #555; font-size: 0.8rem; margin-top: 6px; }
+
+.grupo-titulo { font-size: 0.85rem; font-weight: bold; color: #333; margin: 14px 0 8px; }
+.prov-fila { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.prov-fila h3 { margin: 0; font-size: 1.05rem; }
+.prov-quien { font-size: 0.78rem; color: #777; margin-top: 4px; }
+
+.proveedor-hoy { border: 2px solid #ff6a00; }
+.proveedor .btn-entrar { background: #333; margin-top: 10px; }
+.proveedor-hoy .btn-entrar { background: #ff6a00; padding: 14px; font-size: 1rem; }
+.badge-falta { background: #fff1e6; color: #a64200; border: 1px solid #ff6a00; }
+
+.proveedor-listo { padding: 10px 12px; box-shadow: none; }
+.proveedor-listo.ok     { background: #eaffea; border: 1px solid #4CAF50; }
+.proveedor-listo.nopido { background: #ffeaea; border: 1px solid #e00; }
+.proveedor-listo h3 { font-size: 0.95rem; }
+.btn-chico { width: auto; padding: 6px 16px; margin-top: 8px; background: #555; font-size: 0.85rem; }
+
+details.grupo { background: #fff; border: 1px solid #ccc; border-radius: 12px; margin-bottom: 10px; }
+details.grupo summary {
+  padding: 14px; cursor: pointer; font-weight: bold; color: #555;
+  list-style: none; display: flex; justify-content: space-between; align-items: center;
+}
+details.grupo summary::-webkit-details-marker { display: none; }
+details.grupo summary::after { content: "▾"; }
+details.grupo[open] summary::after { content: "▴"; }
+details.grupo .contenido { padding: 0 10px 4px; }
+
+/* ═══════════════════════════════════════
+   BARRA "VER CARRITO" (fija abajo)
+   ═══════════════════════════════════════ */
+.barra-carrito {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 98;
+  display: none; align-items: center; justify-content: space-between;
+  background: #ff6a00; color: #fff; font-weight: bold; font-size: 1.05rem;
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom, 0px));
+  cursor: pointer; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.25);
+}
+.barra-carrito .cant {
+  background: #fff; color: #ff6a00; border-radius: 20px;
+  padding: 2px 12px; margin-left: 8px; font-size: 0.9rem;
+}
+#pantalla-productos { padding-bottom: 100px; }
+body.con-barra .toast { bottom: 90px; }
+
+
+/* ═══════════════════════════════════════
+   PESTAÑAS DEL HEADER (icono + nombre)
+   ═══════════════════════════════════════ */
+.header-der { display: flex; gap: 5px; }
+.header-der button {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: #000; color: #fff; margin: 0; padding: 5px 8px; min-width: 54px;
+}
+.header-der .ico { font-size: 1.15rem; line-height: 1; }
+.header-der .lbl { font-size: 0.65rem; font-weight: normal; line-height: 1; white-space: nowrap; }
+.header-der button.activo { background: #ff6a00; }
+@media (max-width: 420px) { .nombre-marca { font-size: 0.95rem; } }
