@@ -16,6 +16,73 @@ function escaparHTML(t) {
   return String(t ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 
+// ── Carrito guardado en el dispositivo (por usuario + colegio + día) ──
+const PREFIJO_CARRITO = "gm_carrito_";
+
+function claveCarrito() {
+  if (!usuarioActual || !colegioActual) return null;
+  return `${PREFIJO_CARRITO}${usuarioActual.id}_${colegioActual}_${hoyArgentina()}`;
+}
+
+function guardarCarritoLocal() {
+  const clave = claveCarrito();
+  if (!clave) return;
+  try {
+    const limpio = {};
+    Object.keys(pedidos).forEach(id => {
+      const items = pedidos[id] || [];
+      if (items.length && items[0] !== MARCA_NO_PIDO) limpio[id] = items;
+    });
+    if (Object.keys(limpio).length) localStorage.setItem(clave, JSON.stringify(limpio));
+    else localStorage.removeItem(clave);
+  } catch (e) {
+    console.warn("No se pudo guardar el carrito en el dispositivo", e);
+  }
+}
+
+// Devuelve cuántos proveedores recuperó
+function restaurarCarritoLocal() {
+  const clave = claveCarrito();
+  if (!clave) return 0;
+  let cant = 0;
+  try {
+    // Borra carritos de días anteriores
+    const hoy = hoyArgentina();
+    const claves = [];
+    for (let i = 0; i < localStorage.length; i++) claves.push(localStorage.key(i));
+    claves.forEach(k => {
+      if (k && k.startsWith(PREFIJO_CARRITO) && !k.endsWith("_" + hoy)) localStorage.removeItem(k);
+    });
+    const guardado = JSON.parse(localStorage.getItem(clave) || "{}");
+    Object.keys(guardado).forEach(id => {
+      const items = guardado[id];
+      if (!Array.isArray(items) || !items.length) return;
+      if (pedidos[id] && pedidos[id][0] === MARCA_NO_PIDO) return; // ya quedó como NO PIDO
+      pedidos[id] = items;
+      cant++;
+    });
+  } catch (e) {
+    console.warn("No se pudo recuperar el carrito", e);
+  }
+  return cant;
+}
+
+// ── Color por colegio ──
+function colorColegio(id) {
+  return colegios.find(c => c.id === id)?.color || "#888";
+}
+
+// Pinta la franja del header y las etiquetas según el colegio actual
+function aplicarColorColegio(pantallaId) {
+  const sinColegio = ["pantalla-login", "pantalla-colegios", "pantalla-historial"].includes(pantallaId);
+  const col = (!sinColegio && colegioActual) ? colegios.find(c => c.id === colegioActual) : null;
+  if (col) document.body.style.setProperty("--colegio", col.color);
+  else document.body.style.removeProperty("--colegio");
+  document.querySelectorAll("[data-chip-colegio]").forEach(el => {
+    el.innerText = col ? col.nombre : "";
+  });
+}
+
 // Mail de quien hizo el pedido de hoy (colegio + proveedor), o null
 function quienPidio(colegioId, proveedorId) {
   const r = pedidosHoy.find(x => x.colegio_id === colegioId && x.proveedor_id === proveedorId);
@@ -68,6 +135,7 @@ async function traerPedidosDeHoy() {
     new Date(b.actualizado_en || b.created_at) - new Date(a.actualizado_en || a.created_at));
   pedidosHoy = ordenados;
   historial = ordenados.map(r => ({
+    colegioId: r.colegio_id,
     colegio:   (colegios.find(c => c.id === r.colegio_id)?.nombre || r.colegio_id).toUpperCase(),
     proveedor: proveedoresComunes.find(p => p.id === r.proveedor_id)?.nombre || r.proveedor_id.toUpperCase(),
     contenido: r.contenido,
@@ -135,12 +203,14 @@ let proveedoresPedidos = {}; // persiste el estado "pedido" aunque se vacíe el 
 // 1. DATOS
 // ─────────────────────────────────────────
 
+// El "color" identifica a cada colegio (franja del header, tarjetas, historial).
+// Evité verde / rojo / naranja porque ya se usan para los estados de los pedidos.
 const colegios = [
-  { id: "defensa",  nombre: "Defensa" },
-  { id: "naval",   nombre: "Naval" },
-  { id: "grierson",nombre: "Grierson" },
-  { id: "tosco",   nombre: "Tosco" },
-  { id: "lorca",   nombre: "Lorca" }
+  { id: "defensa",  nombre: "Defensa",  color: "#2F6DB5" }, // azul
+  { id: "naval",    nombre: "Naval",    color: "#138D90" }, // turquesa
+  { id: "grierson", nombre: "Grierson", color: "#7B52AB" }, // violeta
+  { id: "tosco",    nombre: "Tosco",    color: "#C13584" }, // magenta
+  { id: "lorca",    nombre: "Lorca",    color: "#8A5A3C" }  // marrón
 ];
 
 const proveedoresComunes = [
@@ -667,6 +737,7 @@ function mostrarPantalla(id) {
   document.getElementById(id).style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
   actualizarBarraCarrito();
+  aplicarColorColegio(id);
   const pestanas = { "pantalla-historial": "btn-historial", "pantalla-agenda": "btn-agenda" };
   ["btn-historial", "btn-agenda"].forEach(b => {
     const el = document.getElementById(b);
@@ -690,12 +761,8 @@ function volverInicio()      { mostrarPantalla("pantalla-colegios"); }
 function volverColegios()    { mostrarPantalla("pantalla-colegios"); }
 function volverProductos()   { mostrarPantalla("pantalla-productos"); }
 
+// El carrito se guarda solo en el dispositivo, así que se puede salir tranquilo
 function volverProveedores() {
-  const items = pedidos[proveedorActual] || [];
-  const esNoPido = items[0] === MARCA_NO_PIDO;
-  if (!esNoPido && items.length > 0) {
-    if (!confirm("Tenés productos en el carrito. ¿Querés salir igual?")) return;
-  }
   renderProveedores();
   mostrarPantalla("pantalla-proveedores");
 }
@@ -709,7 +776,8 @@ function renderColegios() {
   cont.innerHTML = "";
   colegios.forEach(c => {
     let div = document.createElement("div");
-    div.className = "colegio";
+    div.className = "colegio colegio-color";
+    div.style.setProperty("--c", c.color);
     div.innerHTML = `<h3>${c.nombre}</h3><button onclick="seleccionarColegio('${c.id}')">Entrar</button>`;
     cont.appendChild(div);
   });
@@ -720,8 +788,10 @@ async function seleccionarColegio(id) {
   document.getElementById("titulo-colegio").innerText = colegios.find(c => c.id === id).nombre;
   await traerPedidosDeHoy();
   aplicarEstadoColegio();
+  const recuperados = restaurarCarritoLocal();
   renderProveedores();
   mostrarPantalla("pantalla-proveedores");
+  if (recuperados) mostrarToast(`🛒 Carrito recuperado (${recuperados})`);
 }
 
 // ─────────────────────────────────────────
@@ -987,6 +1057,7 @@ function agregarTodoDulce() {
 
   const texto = `${nombre} - ${cantidad}x${unidad}`;
   pedidos[proveedorActual].push(texto);
+  guardarCarritoLocal();
 
   document.getElementById("td_nombre").value   = "";
   document.getElementById("td_cantidad").value = "";
@@ -1010,6 +1081,7 @@ async function marcarNoPido() {
   if (!guardado) return mostrarToast("⚠️ No se pudo guardar. Probá de nuevo");
 
   pedidos[proveedorActual] = [MARCA_NO_PIDO];
+  guardarCarritoLocal();
   await traerPedidosDeHoy();
 
   // Copiar al portapapeles
@@ -1020,63 +1092,6 @@ async function marcarNoPido() {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(texto).then(done).catch(() => { _clipFallback(texto); done(); });
   } else { _clipFallback(texto); done(); }
-}
-
-function copiarPedido() {
-  const items = pedidos[proveedorActual] || [];
-  if (items.length === 0) return alert("El carrito está vacío");
-
-  const colNom  = colegios.find(c => c.id === colegioActual).nombre.toUpperCase();
-  const provNom = proveedoresComunes.find(p => p.id === proveedorActual)?.nombre || proveedorActual.toUpperCase();
-  let texto = `*${colNom}*\n\n*${provNom}*\n\n`;
-
-  if (items[0] === MARCA_NO_PIDO) {
-    texto += `NO PIDO`;
-  } else {
-    items.forEach(item => {
-      if (item.includes(" - ")) {
-        const [nombre, detalle] = item.split(" - ");
-        const [cant, tipo] = detalle.split("x");
-        texto += `- ${cant} ${tipo.toUpperCase()} ${nombre}\n`;
-      } else {
-        texto += `- ${item}\n`;
-      }
-    });
-  }
-
-  // Intentá clipboard moderno, si no funciona usá el fallback
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(texto)
-      .then(() => _pedidoCopiado(colNom, provNom, texto))
-      .catch(() => _clipFallbackYCopiar(texto, colNom, provNom));
-  } else {
-    _clipFallbackYCopiar(texto, colNom, provNom);
-  }
-}
-
-function _clipFallbackYCopiar(texto, colNom, provNom) {
-  const ta = document.createElement("textarea");
-  ta.value = texto;
-  ta.style.position = "fixed";
-  ta.style.top = "0";
-  ta.style.left = "0";
-  ta.style.opacity = "0";
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  ta.setSelectionRange(0, 99999);
-  let ok = false;
-  try {
-    ok = document.execCommand("copy");
-  } catch(e) {}
-  document.body.removeChild(ta);
-
-  if (ok) {
-    _pedidoCopiado(colNom, provNom, texto);
-  } else {
-    // Último recurso: mostrar el texto para copiar manualmente
-    prompt("Copiá este texto manualmente (Ctrl+A, Ctrl+C):", texto);
-  }
 }
 
 function _clipFallback(texto) {
@@ -1120,6 +1135,7 @@ function renderCarrito() {
 
 function eliminar(index) {
   pedidos[proveedorActual].splice(index, 1);
+  guardarCarritoLocal();
   renderCarrito();
 }
 
@@ -1180,6 +1196,7 @@ async function _pedidoCopiado(colNom, provNom, texto) {
 
   proveedoresPedidos[proveedorActual] = true;
   if (!esNoPido) pedidos[proveedorActual] = [];
+  guardarCarritoLocal();
   await traerPedidosDeHoy();
 
   mostrarToast("✅ ¡Copiado y guardado! Pegalo en WhatsApp 📋");
@@ -1206,6 +1223,7 @@ function agregarProducto(nombre, id, event) {
   });
   if (!texto) return alert("Ingresá una cantidad");
   pedidos[proveedorActual].push(texto);
+  guardarCarritoLocal();
   event.target.classList.add("pedido-listo");
   event.target.innerText = "✅ Agregado";
   document.querySelectorAll(`[id*='-${id}']`).forEach(i => i.value = "");
@@ -1225,15 +1243,16 @@ async function verHistorial() {
     cont.innerHTML = "<li style='color:#999;'>No hay pedidos realizados hoy.</li>";
   } else {
     historial.forEach(p => {
+      const color = colorColegio(p.colegioId);
       const esNoPido = p.contenido.trim().endsWith("NO PIDO");
       const lineas = p.contenido.split("\n").filter(l => l.startsWith("- "));
       const itemsHTML = esNoPido
         ? `<span style="color:#e00;font-weight:bold;">🚫 NO PIDO</span>`
         : lineas.map(l => `<span style="display:block;font-size:0.85rem;color:#333;">${l}</span>`).join("");
       const li = document.createElement("li");
-      li.style.cssText = "flex-direction:column;align-items:flex-start;gap:6px;";
+      li.style.cssText = `flex-direction:column;align-items:flex-start;gap:6px;border-left:6px solid ${color};`;
       li.innerHTML = `
-        <strong style="font-size:0.95rem;">${p.colegio} — ${p.proveedor}</strong>
+        <strong style="font-size:0.95rem;"><span style="color:${color}">${p.colegio}</span> — ${p.proveedor}</strong>
         ${p.usuario ? `<span style="font-size:0.78rem;color:#777;">👤 ${escaparHTML(p.usuario)}${p.hora ? " · " + p.hora : ""}${p.modificado ? " (modificado)" : ""}</span>` : ""}
         <div style="padding:6px 10px;background:#f5f5f5;border-radius:6px;width:100%;">${itemsHTML}</div>`;
       cont.appendChild(li);
@@ -1266,7 +1285,7 @@ function verAgenda() {
   const diasSemana = ["domingo","lunes","martes","miercoles","jueves","viernes","sabado"];
   const diaHoy     = diasSemana[new Date().getDay()];
 
-  let html = `<h3 style="text-align:center;">Agenda ${colegioActual.toUpperCase()}</h3>`;
+  let html = `<h3 style="text-align:center;color:${colorColegio(colegioActual)};">Agenda ${colegioActual.toUpperCase()}</h3>`;
 
   if (agendaData.sin_dia && agendaData.sin_dia.length > 0) {
     html += `
