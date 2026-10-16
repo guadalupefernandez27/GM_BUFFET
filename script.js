@@ -1094,6 +1094,34 @@ async function marcarNoPido() {
   } else { _clipFallback(texto); done(); }
 }
 
+// Saca la marca NO PIDO de hoy (borra esa fila en Supabase) para poder hacer el pedido
+async function cancelarNoPido() {
+  if (!confirm("¿Cancelar el NO PIDO de este proveedor?")) return;
+
+  const { error } = await db.from("pedidos_enviados").delete()
+    .eq("fecha", hoyArgentina())
+    .eq("colegio_id", colegioActual)
+    .eq("proveedor_id", proveedorActual)
+    .eq("estado", "no_pido");
+  if (error) {
+    console.error(error);
+    return mostrarToast("⚠️ No se pudo cancelar. Probá de nuevo");
+  }
+
+  // Si falta el permiso de borrado, Supabase no da error: simplemente no borra.
+  // Por eso se vuelve a consultar para confirmar que la marca desapareció.
+  await traerPedidosDeHoy();
+  const sigue = pedidosHoy.some(r =>
+    r.colegio_id === colegioActual && r.proveedor_id === proveedorActual && r.estado === "no_pido");
+  if (sigue) return mostrarToast("⚠️ No se pudo cancelar: falta el permiso de borrado en Supabase");
+
+  pedidos[proveedorActual] = [];
+  delete proveedoresPedidos[proveedorActual];
+  guardarCarritoLocal();
+  mostrarToast("NO PIDO cancelado ✅");
+  renderProductos();
+}
+
 function _clipFallback(texto) {
   const ta = document.createElement("textarea");
   ta.value = texto;
