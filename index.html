@@ -30,11 +30,13 @@
 <div id="pantalla-login" class="pantalla" style="display:none;">
   <h2>Iniciar sesión</h2>
   <div class="colegio">
-    <input id="login-email" type="email" placeholder="Email" autocomplete="username">
-    <input id="login-clave" type="password" placeholder="Contraseña" autocomplete="current-password"
-           style="margin-top:8px;" onkeydown="if(event.key==='Enter') iniciarSesion()">
-    <button onclick="iniciarSesion()">Entrar</button>
-    <p id="login-error" style="color:#e00;text-align:center;margin:10px 0 0;"></p>
+    <form id="form-login" onsubmit="iniciarSesion(event)">
+      <input id="login-email" name="email" type="email" placeholder="Email" autocomplete="username" required>
+      <input id="login-clave" name="password" type="password" placeholder="Contraseña" autocomplete="current-password"
+             required style="margin-top:8px;">
+      <button type="submit">Entrar</button>
+      <p id="login-error" style="color:#e00;text-align:center;margin:10px 0 0;"></p>
+    </form>
   </div>
 </div>
 
@@ -102,6 +104,7 @@
 <div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

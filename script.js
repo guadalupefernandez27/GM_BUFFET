@@ -2,9 +2,7 @@
 // 0. SUPABASE (conexión, login y guardado)
 // ─────────────────────────────────────────
 
-const SUPABASE_URL = "https://fxxiuhxqlzgkylvdkpua.supabase.co";
-const SUPABASE_KEY = "sb_publishable_hB38kKYOYDXejmsLH5zV1A_AjhWutWm"; // la que empieza con sb_publishable_
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// La conexión (db) se crea en config.js
 
 let usuarioActual = null;  // { id, email, nombre, rol }
 let pedidosHoy = [];       // filas de hoy (todos los colegios)
@@ -14,7 +12,18 @@ function hoyArgentina() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 }
 
-async function iniciarSesion() {
+function escaparHTML(t) {
+  return String(t ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+// Mail de quien hizo el pedido de hoy (colegio + proveedor), o null
+function quienPidio(colegioId, proveedorId) {
+  const r = pedidosHoy.find(x => x.colegio_id === colegioId && x.proveedor_id === proveedorId);
+  return r && r.usuario_email ? r.usuario_email : null;
+}
+
+async function iniciarSesion(e) {
+  if (e) e.preventDefault();
   const email = document.getElementById("login-email").value.trim();
   const clave = document.getElementById("login-clave").value;
   const err   = document.getElementById("login-error");
@@ -28,12 +37,12 @@ async function iniciarSesion() {
       : "Error: " + error.message;
     return;
   }
-  document.getElementById("login-clave").value = "";
   await arrancar();
 }
 
 async function cerrarSesion() {
   await db.auth.signOut();
+  document.getElementById("login-clave").value = "";
   usuarioActual = null;
   colegioActual = null;
   proveedorActual = null;
@@ -57,7 +66,11 @@ async function traerPedidosDeHoy() {
   historial = data.map(r => ({
     colegio:   (colegios.find(c => c.id === r.colegio_id)?.nombre || r.colegio_id).toUpperCase(),
     proveedor: proveedoresComunes.find(p => p.id === r.proveedor_id)?.nombre || r.proveedor_id.toUpperCase(),
-    contenido: r.contenido
+    contenido: r.contenido,
+    usuario:   r.usuario_email || null,
+    hora:      r.actualizado_en
+      ? new Date(r.actualizado_en).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })
+      : ""
   }));
 }
 
@@ -78,8 +91,7 @@ async function guardarPedido(estado, texto) {
     colegio_id:   colegioActual,
     proveedor_id: proveedorActual,
     estado:       estado,
-    contenido:    texto,
-    user_id:      usuarioActual.id
+    contenido:    texto
   }, { onConflict: "fecha,colegio_id,proveedor_id" });
   if (error) {
     console.error(error);
@@ -708,6 +720,7 @@ function renderProveedores() {
   proveedoresPorColegio[colegioActual].forEach(p => {
     const esPrioritario = p.id === idPrioritario;
     const estado = _estadoProveedor(p.id);
+    const quien  = estado ? quienPidio(colegioActual, p.id) : null;
 
     let borderColor = "";
     let badge = "";
@@ -727,6 +740,7 @@ function renderProveedores() {
         <h3 style="margin:0;">${esPrioritario ? p.nombre + " 🕑" : p.nombre}</h3>
         ${badge}
       </div>
+      ${quien ? `<div style="font-size:0.78rem;color:#777;margin-bottom:8px;">👤 ${escaparHTML(quien)}</div>` : ""}
       <button onclick="seleccionarProveedor('${p.id}')">Entrar</button>`;
     cont.appendChild(div);
   });
@@ -1090,6 +1104,7 @@ async function verHistorial() {
       li.style.cssText = "flex-direction:column;align-items:flex-start;gap:6px;";
       li.innerHTML = `
         <strong style="font-size:0.95rem;">${p.colegio} — ${p.proveedor}</strong>
+        ${p.usuario ? `<span style="font-size:0.78rem;color:#777;">👤 ${escaparHTML(p.usuario)}${p.hora ? " · " + p.hora : ""}</span>` : ""}
         <div style="padding:6px 10px;background:#f5f5f5;border-radius:6px;width:100%;">${itemsHTML}</div>`;
       cont.appendChild(li);
     });
