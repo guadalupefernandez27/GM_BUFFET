@@ -863,16 +863,16 @@ function _tarjetaProveedor(id, esDeHoy) {
   const enCarrito = estado === "encarrito";
   const cant = (pedidos[id] || []).length;
   let badge = "";
-  if (enCarrito)    badge = `<span class="badge-estado badge-falta">En carrito (${cant})</span>`;
+  if (enCarrito)    badge = `<span class="badge-estado badge-falta">Sin enviar</span>`;
   else if (esDeHoy) badge = `<span class="badge-estado badge-falta">Falta pedir</span>`;
 
-  div.className = "proveedor" + (esDeHoy ? " proveedor-hoy" : "");
+  div.className = "proveedor" + (esDeHoy ? " proveedor-hoy" : "") + (enCarrito ? " proveedor-encurso" : "");
   div.innerHTML = `
     <div class="prov-fila">
       <h3>${nombre}</h3>
       ${badge}
     </div>
-    <button class="btn-entrar" onclick="seleccionarProveedor('${id}')">${enCarrito ? "Seguir pedido" : "Entrar"}</button>`;
+    <button class="btn-entrar" onclick="seleccionarProveedor('${id}')">${enCarrito ? `🛒 Seguir pedido (${cant})` : "Entrar"}</button>`;
   return div;
 }
 
@@ -910,6 +910,10 @@ function renderProveedores() {
 
   const esResuelto = id => ["pedido", "nopido"].includes(_estadoVisual(id));
 
+  // Pedidos empezados y sin enviar: van arriba de todo, en cualquier grupo que estén
+  const enCursoIds   = todos.filter(id => _estadoVisual(id) === "encarrito");
+  const fueraDeCurso = id => !enCursoIds.includes(id);
+
   // Resumen del día
   const resumen = document.createElement("div");
   resumen.className = "hoy-resumen";
@@ -927,8 +931,12 @@ function renderProveedores() {
   cont.appendChild(resumen);
 
   // Lo de hoy: primero lo que falta, después lo ya resuelto
-  const pendientes = hoyIds.filter(id => !esResuelto(id));
+  const pendientes = hoyIds.filter(id => !esResuelto(id) && fueraDeCurso(id));
   const hechos     = hoyIds.filter(esResuelto);
+  if (enCursoIds.length) {
+    _tituloGrupo(cont, "En carrito (sin enviar)");
+    enCursoIds.forEach(id => cont.appendChild(_tarjetaProveedor(id, hoyIds.includes(id))));
+  }
   if (pendientes.length) {
     _tituloGrupo(cont, "Falta pedir");
     pendientes.forEach(id => cont.appendChild(_tarjetaProveedor(id, true)));
@@ -939,8 +947,8 @@ function renderProveedores() {
   }
 
   // El resto, plegado (abierto solo si hoy no hay nada programado)
-  _grupoPlegable(cont, "Sin día fijo", sinDiaIds, false);
-  _grupoPlegable(cont, "Otros proveedores", otrosIds, hoyIds.length === 0);
+  _grupoPlegable(cont, "Sin día fijo", sinDiaIds.filter(fueraDeCurso), false);
+  _grupoPlegable(cont, "Otros proveedores", otrosIds.filter(fueraDeCurso), hoyIds.length === 0);
 }
 
 function seleccionarProveedor(id) {

@@ -212,9 +212,19 @@ li button { width: auto; padding: 5px 10px; }
 .prov-quien { font-size: 0.78rem; color: #777; margin-top: 4px; }
 
 .proveedor-hoy { border: 2px solid var(--acento); }
-/* Entrar: contorno del color del colegio; los de hoy van rellenos */
+/* Entrar: solo contorno del color del colegio. Lo único relleno es "Seguir pedido" */
 .proveedor .btn-entrar { background: #fff; color: var(--acento); border: 2px solid var(--acento); margin-top: 10px; }
-.proveedor-hoy .btn-entrar { background: var(--acento); color: #fff; padding: 14px; font-size: 1rem; }
+.proveedor-hoy .btn-entrar { padding: 14px; font-size: 1rem; }
+.proveedor-encurso {
+  border: 3px solid var(--acento);
+  background: #fff;
+  background: color-mix(in srgb, var(--acento) 8%, white);
+}
+.proveedor-encurso .btn-entrar {
+  background: var(--acento); color: #fff;
+  padding: 16px; font-size: 1.05rem;
+}
+
 .badge-falta {
   background: #f4f4f4; color: var(--acento); border: 1px solid var(--acento);
   background: color-mix(in srgb, var(--acento) 10%, white);
