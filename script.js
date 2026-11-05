@@ -16,73 +16,6 @@ function escaparHTML(t) {
   return String(t ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 
-// ── Carrito guardado en el dispositivo (por usuario + colegio + día) ──
-const PREFIJO_CARRITO = "gm_carrito_";
-
-function claveCarrito() {
-  if (!usuarioActual || !colegioActual) return null;
-  return `${PREFIJO_CARRITO}${usuarioActual.id}_${colegioActual}_${hoyArgentina()}`;
-}
-
-function guardarCarritoLocal() {
-  const clave = claveCarrito();
-  if (!clave) return;
-  try {
-    const limpio = {};
-    Object.keys(pedidos).forEach(id => {
-      const items = pedidos[id] || [];
-      if (items.length && items[0] !== MARCA_NO_PIDO) limpio[id] = items;
-    });
-    if (Object.keys(limpio).length) localStorage.setItem(clave, JSON.stringify(limpio));
-    else localStorage.removeItem(clave);
-  } catch (e) {
-    console.warn("No se pudo guardar el carrito en el dispositivo", e);
-  }
-}
-
-// Devuelve cuántos proveedores recuperó
-function restaurarCarritoLocal() {
-  const clave = claveCarrito();
-  if (!clave) return 0;
-  let cant = 0;
-  try {
-    // Borra carritos de días anteriores
-    const hoy = hoyArgentina();
-    const claves = [];
-    for (let i = 0; i < localStorage.length; i++) claves.push(localStorage.key(i));
-    claves.forEach(k => {
-      if (k && k.startsWith(PREFIJO_CARRITO) && !k.endsWith("_" + hoy)) localStorage.removeItem(k);
-    });
-    const guardado = JSON.parse(localStorage.getItem(clave) || "{}");
-    Object.keys(guardado).forEach(id => {
-      const items = guardado[id];
-      if (!Array.isArray(items) || !items.length) return;
-      if (pedidos[id] && pedidos[id][0] === MARCA_NO_PIDO) return; // ya quedó como NO PIDO
-      pedidos[id] = items;
-      cant++;
-    });
-  } catch (e) {
-    console.warn("No se pudo recuperar el carrito", e);
-  }
-  return cant;
-}
-
-// ── Color por colegio ──
-function colorColegio(id) {
-  return colegios.find(c => c.id === id)?.color || "#888";
-}
-
-// Pinta la franja del header y las etiquetas según el colegio actual
-function aplicarColorColegio(pantallaId) {
-  const sinColegio = ["pantalla-login", "pantalla-colegios", "pantalla-historial"].includes(pantallaId);
-  const col = (!sinColegio && colegioActual) ? colegios.find(c => c.id === colegioActual) : null;
-  if (col) document.body.style.setProperty("--colegio", col.color);
-  else document.body.style.removeProperty("--colegio");
-  document.querySelectorAll("[data-chip-colegio]").forEach(el => {
-    el.innerText = col ? col.nombre : "";
-  });
-}
-
 // Mail de quien hizo el pedido de hoy (colegio + proveedor), o null
 function quienPidio(colegioId, proveedorId) {
   const r = pedidosHoy.find(x => x.colegio_id === colegioId && x.proveedor_id === proveedorId);
@@ -119,6 +52,7 @@ async function cerrarSesion() {
   proveedoresPedidos = {};
   pedidosHoy = [];
   document.getElementById("header-der").style.display = "none";
+  document.body.classList.remove("es-admin");
   mostrarPantalla("pantalla-login");
 }
 
@@ -174,6 +108,323 @@ async function guardarPedido(estado, texto) {
   return true;
 }
 
+// ─────────────────────────────────────────
+// 0b. CATÁLOGO DESDE SUPABASE + PANEL DE ADMINISTRACIÓN
+// ─────────────────────────────────────────
+
+let catalogoBD = [];          // todas las filas de la tabla productos (incluye ocultos)
+let catalogoDesdeBD = false;  // false = se usa el catálogo de respaldo de script.js
+
+// Arma productosPorProveedor (lo que ven los usuarios al pedir) a partir de catalogoBD
+function reconstruirCatalogo() {
+  const mapa = {};
+  catalogoBD.filter(r => r.activo)
+    .sort((a, b) => a.orden - b.orden || a.id - b.id)
+    .forEach(r => {
+      (mapa[r.proveedor_id] = mapa[r.proveedor_id] || []).push(
+        { nombre: r.nombre, id: "p" + r.id, tipos: r.tipos, sinStock: r.sin_stock });
+    });
+  productosPorProveedor = mapa;
+}
+
+async function cargarProductos() {
+  const { data, error } = await db.from("productos").select("*").order("orden").order("id");
+  if (error || !data || data.length === 0) {
+    if (error) {
+      console.error(error);
+      mostrarToast("⚠️ No se pudo cargar el catálogo; se usa una copia guardada");
+    }
+    catalogoBD = [];
+    catalogoDesdeBD = false;
+    productosPorProveedor = PRODUCTOS_RESPALDO;
+    return;
+  }
+  catalogoBD = data;
+  catalogoDesdeBD = true;
+  reconstruirCatalogo();
+}
+
+const UNIDADES_COMUNES = ["Unidad", "Display", "Caja", "Bolsa", "Pack", "KG", "Rollo", "Docena", "Porción", "Medio"];
+let adminProveedor = null;
+let nuevoTipos = ["Unidad"];
+
+function _filasProveedor(pid) {
+  return catalogoBD.filter(r => r.proveedor_id === pid).sort((a, b) => a.orden - b.orden || a.id - b.id);
+}
+
+function _nombreRepetido(pid, nombre, exceptoId) {
+  return catalogoBD.some(r => r.proveedor_id === pid && r.id !== exceptoId && r.nombre === nombre);
+}
+
+// Botoncitos de unidades (Unidad, Caja...). "tipos" se modifica en el lugar.
+// compacto = true: muestra solo las unidades activas y un botón "Unidades" para editarlas.
+function _crearChips(tipos, alCambiar, compacto) {
+  const caja = document.createElement("div");
+  caja.className = "chips";
+  let abierto = !compacto;
+
+  function pintar() {
+    caja.innerHTML = "";
+    const lista = abierto ? Array.from(new Set([...UNIDADES_COMUNES, ...tipos])) : tipos.slice();
+    lista.forEach(t => {
+      const chip = document.createElement("span");
+      const activo = tipos.includes(t);
+      chip.className = "chip" + (activo ? " on" : "") + (abierto ? "" : " fija");
+      chip.textContent = t;
+      if (abierto) {
+        chip.addEventListener("click", () => {
+          const i = tipos.indexOf(t);
+          if (i >= 0) {
+            if (tipos.length === 1) return alert("El producto necesita al menos una unidad");
+            tipos.splice(i, 1);
+          } else {
+            tipos.push(t);
+          }
+          pintar();
+          alCambiar(tipos.slice());
+        });
+      }
+      caja.appendChild(chip);
+    });
+
+    if (abierto) {
+      const otra = document.createElement("input");
+      otra.type = "text";
+      otra.placeholder = "Otra unidad";
+      otra.className = "chip-otra";
+      const mas = document.createElement("span");
+      mas.className = "chip mas";
+      mas.textContent = "+";
+      const agregar = () => {
+        const v = otra.value.trim();
+        if (!v) return;
+        if (!tipos.some(x => x.toLowerCase() === v.toLowerCase())) tipos.push(v.charAt(0).toUpperCase() + v.slice(1));
+        pintar();
+        alCambiar(tipos.slice());
+      };
+      mas.addEventListener("click", agregar);
+      otra.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); agregar(); } });
+      caja.appendChild(otra);
+      caja.appendChild(mas);
+    }
+
+    if (compacto) {
+      const ed = document.createElement("span");
+      ed.className = "chip edit";
+      ed.textContent = abierto ? "Listo" : "✎ Unidades";
+      ed.addEventListener("click", () => { abierto = !abierto; pintar(); });
+      caja.appendChild(ed);
+    }
+  }
+  pintar();
+  return caja;
+}
+
+function _switch(texto, valor, alCambiar) {
+  const lab = document.createElement("label");
+  lab.className = "admin-switch";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = valor;
+  cb.addEventListener("change", async () => {
+    const ok = await alCambiar(cb.checked);
+    if (ok === false) cb.checked = !cb.checked;
+  });
+  lab.appendChild(cb);
+  lab.appendChild(document.createTextNode(" " + texto));
+  return lab;
+}
+
+function _btnIcono(texto, alClick, deshabilitado, clase) {
+  const b = document.createElement("button");
+  b.className = "btn-icono" + (clase ? " " + clase : "");
+  b.textContent = texto;
+  b.disabled = !!deshabilitado;
+  b.addEventListener("click", alClick);
+  return b;
+}
+
+function _cardAdmin(r, idx, total, hayFiltro) {
+  const div = document.createElement("div");
+  div.className = "producto admin-card" + (r.activo ? "" : " oculto");
+
+  const nombre = document.createElement("input");
+  nombre.type = "text";
+  nombre.className = "admin-nombre";
+  nombre.value = r.nombre;
+  nombre.addEventListener("change", async () => {
+    const v = nombre.value.trim().toUpperCase();
+    if (!v) { nombre.value = r.nombre; return; }
+    if (v !== r.nombre && _nombreRepetido(r.proveedor_id, v, r.id)) {
+      alert("Ya hay un producto con ese nombre en este proveedor");
+      nombre.value = r.nombre;
+      return;
+    }
+    nombre.value = v;
+    if (v !== r.nombre) await adminGuardar(r, { nombre: v });
+  });
+  div.appendChild(nombre);
+
+  div.appendChild(_crearChips(r.tipos.slice(), nuevos => adminGuardar(r, { tipos: nuevos }), true));
+
+  const fila = document.createElement("div");
+  fila.className = "admin-fila";
+  fila.appendChild(_switch("Sin stock", r.sin_stock, marcado => adminGuardar(r, { sin_stock: marcado })));
+  fila.appendChild(_switch("Oculto", !r.activo, async marcado => {
+    const ok = await adminGuardar(r, { activo: !marcado });
+    if (ok) div.classList.toggle("oculto", marcado);
+    return ok;
+  }));
+  if (!hayFiltro) {
+    fila.appendChild(_btnIcono("▲", () => adminMover(r, -1), idx === 0));
+    fila.appendChild(_btnIcono("▼", () => adminMover(r, +1), idx === total - 1));
+  }
+  fila.appendChild(_btnIcono("🗑", () => adminBorrar(r), false, "btn-borrar"));
+  div.appendChild(fila);
+  return div;
+}
+
+function renderAdmin() {
+  const cont = document.getElementById("admin-lista");
+  const filtro = document.getElementById("admin-buscar").value.trim().toLowerCase();
+  const filas = _filasProveedor(adminProveedor);
+  const visibles = filas.filter(r => !filtro || r.nombre.toLowerCase().includes(filtro));
+
+  renderAdminResumen();
+
+  cont.innerHTML = "";
+  if (!visibles.length) {
+    cont.innerHTML = `<p style="text-align:center;color:#999;">No hay productos para mostrar.</p>`;
+    return;
+  }
+  visibles.forEach(r => cont.appendChild(_cardAdmin(r, filas.indexOf(r), filas.length, !!filtro)));
+}
+
+function _montarNuevoChips() {
+  nuevoTipos = ["Unidad"];
+  const caja = document.getElementById("nuevo-chips");
+  caja.innerHTML = "";
+  caja.appendChild(_crearChips(nuevoTipos, () => {}));
+}
+
+async function verAdmin() {
+  if (!usuarioActual || usuarioActual.rol !== "admin") return;
+  await cargarProductos();
+
+  const aviso = document.getElementById("admin-aviso");
+  const panel = document.getElementById("admin-panel");
+  if (!catalogoDesdeBD) {
+    aviso.innerHTML = `<div class="aviso-admin">⚠️ Todavía no está creada la tabla de productos en Supabase (o está vacía). Ejecutá el archivo productos_supabase.sql en el Editor SQL de Supabase y volvé a entrar a esta pantalla.</div>`;
+    panel.style.display = "none";
+    mostrarPantalla("pantalla-admin");
+    return;
+  }
+  aviso.innerHTML = "";
+  panel.style.display = "";
+
+  const sel = document.getElementById("admin-proveedor");
+  if (!sel.options.length) {
+    proveedoresComunes.filter(p => p.id !== "todo_dulce").forEach(p => sel.add(new Option(p.nombre, p.id)));
+    _montarNuevoChips();
+  }
+  if (!adminProveedor) adminProveedor = sel.value;
+  sel.value = adminProveedor;
+  document.getElementById("admin-buscar").value = "";
+  renderAdmin();
+  mostrarPantalla("pantalla-admin");
+}
+
+function adminCambiarProveedor() {
+  adminProveedor = document.getElementById("admin-proveedor").value;
+  document.getElementById("admin-buscar").value = "";
+  renderAdmin();
+}
+
+function adminBuscar() { renderAdmin(); }
+
+// Guarda cambios de un producto en la base (la base solo lo permite al administrador)
+async function adminGuardar(r, cambios) {
+  const { error } = await db.from("productos").update(cambios).eq("id", r.id);
+  if (error) {
+    console.error(error);
+    mostrarToast("⚠️ No se pudo guardar el cambio");
+    return false;
+  }
+  Object.assign(r, cambios);
+  reconstruirCatalogo();
+  renderAdminResumen();
+  mostrarToast("Guardado ✅");
+  return true;
+}
+
+function renderAdminResumen() {
+  const filas = _filasProveedor(adminProveedor);
+  const n = filas.length;
+  const o = filas.filter(r => !r.activo).length;
+  const ss = filas.filter(r => r.sin_stock).length;
+  document.getElementById("admin-resumen").innerText =
+    `${n} producto${n === 1 ? "" : "s"} · ${o} oculto${o === 1 ? "" : "s"} · ${ss} sin stock`;
+}
+
+async function adminMover(r, delta) {
+  const filas = _filasProveedor(adminProveedor);
+  const i = filas.indexOf(r), j = i + delta;
+  if (j < 0 || j >= filas.length) return;
+  const otro = filas[j];
+  const [o1, o2] = [r.orden, otro.orden];
+  const [a, b] = await Promise.all([
+    db.from("productos").update({ orden: o2 }).eq("id", r.id),
+    db.from("productos").update({ orden: o1 }).eq("id", otro.id)
+  ]);
+  if (a.error || b.error) {
+    console.error(a.error || b.error);
+    mostrarToast("⚠️ No se pudo cambiar el orden");
+    await cargarProductos();
+    renderAdmin();
+    return;
+  }
+  r.orden = o2;
+  otro.orden = o1;
+  reconstruirCatalogo();
+  renderAdmin();
+}
+
+async function adminBorrar(r) {
+  if (!confirm(`¿Borrar "${r.nombre}" del catálogo?\n\nSi solo querés que no se pueda pedir por ahora, usá "Sin stock" u "Oculto".`)) return;
+  const { error } = await db.from("productos").delete().eq("id", r.id);
+  if (error) {
+    console.error(error);
+    return mostrarToast("⚠️ No se pudo borrar");
+  }
+  catalogoBD = catalogoBD.filter(x => x.id !== r.id);
+  reconstruirCatalogo();
+  renderAdmin();
+  mostrarToast("Producto borrado");
+}
+
+async function adminAgregar() {
+  const inp = document.getElementById("nuevo-nombre");
+  const nombre = inp.value.trim().toUpperCase();
+  if (!nombre) return alert("Escribí el nombre del producto");
+  if (_nombreRepetido(adminProveedor, nombre, null)) return alert("Ya hay un producto con ese nombre en este proveedor");
+
+  const orden = Math.max(0, ..._filasProveedor(adminProveedor).map(r => r.orden)) + 1;
+  const { data, error } = await db.from("productos")
+    .insert({ proveedor_id: adminProveedor, nombre, tipos: nuevoTipos.slice(), orden })
+    .select().single();
+  if (error) {
+    console.error(error);
+    return mostrarToast("⚠️ No se pudo agregar el producto");
+  }
+  catalogoBD.push(data);
+  reconstruirCatalogo();
+  inp.value = "";
+  _montarNuevoChips();
+  document.getElementById("admin-buscar").value = "";
+  renderAdmin();
+  mostrarToast("Producto agregado ✅");
+}
+
 // Punto de entrada: ve si hay sesión iniciada
 async function arrancar() {
   const { data: { session } } = await db.auth.getSession();
@@ -188,6 +439,10 @@ async function arrancar() {
   };
 
   document.getElementById("header-der").style.display = "";
+  const esAdmin = usuarioActual.rol === "admin";
+  document.getElementById("btn-admin").style.display = esAdmin ? "" : "none";
+  document.body.classList.toggle("es-admin", esAdmin);
+  await cargarProductos();
   renderColegios();
   mostrarPantalla("pantalla-colegios");
 }
@@ -203,15 +458,31 @@ let proveedoresPedidos = {}; // persiste el estado "pedido" aunque se vacíe el 
 // 1. DATOS
 // ─────────────────────────────────────────
 
-// El "color" identifica a cada colegio (franja del header, tarjetas, historial).
-// Evité verde / rojo / naranja porque ya se usan para los estados de los pedidos.
 const colegios = [
-  { id: "defensa",  nombre: "Defensa",  color: "#2F6DB5" }, // azul
-  { id: "naval",    nombre: "Naval",    color: "#138D90" }, // turquesa
-  { id: "grierson", nombre: "Grierson", color: "#7B52AB" }, // violeta
-  { id: "tosco",    nombre: "Tosco",    color: "#C13584" }, // magenta
-  { id: "lorca",    nombre: "Lorca",    color: "#8A5A3C" }  // marrón
+  { id: "defensa",  nombre: "Defensa" },
+  { id: "naval",   nombre: "Naval" },
+  { id: "grierson",nombre: "Grierson" },
+  { id: "tosco",   nombre: "Tosco" },
+  { id: "lorca",   nombre: "Lorca" }
 ];
+
+// Color de cada colegio (para cambiar uno, se modifica solo el código de acá)
+const COLORES_COLEGIO = {
+  defensa:  "#2563EB",  // azul
+  naval:    "#0E7490",  // turquesa
+  grierson: "#7C3AED",  // violeta
+  tosco:    "#DB2777",  // rosa
+  lorca:    "#8B5E3C"   // café
+};
+function colorColegio(id) { return COLORES_COLEGIO[id] || "#ff6a00"; }
+
+// Tono muy suave del color del colegio (se mezcla con el gris de fondo) para pintar la pantalla
+function tinteColegio(hex, p) {
+  const n = i => parseInt(hex.slice(i, i + 2), 16);
+  const base = 246;
+  const m = v => Math.round(base + (v - base) * p);
+  return `rgb(${m(n(1))}, ${m(n(3))}, ${m(n(5))})`;
+}
 
 const proveedoresComunes = [
   { id: "distrizorz",         nombre: "DISTRIZORZ" },
@@ -250,7 +521,7 @@ const agendaPrioridades = {
   naval:   { 2: "distrizorz", 4: "arcor_chocolates" }
 };
 
-const productosPorProveedor = {
+const PRODUCTOS_RESPALDO = {
   arcor_golosinas: [
     { nombre: "MOGUL TUBITOS 15G",                    id: "mogul_tub_15",        tipos: ["Unidad","Display"] },
     { nombre: "MOGUL PIECITOS 30G",                   id: "mogul_pie_30",        tipos: ["Unidad","Display"] },
@@ -644,6 +915,9 @@ const productosPorProveedor = {
   { nombre: "AGREGAR MANUALMENTE", id: "td_manual", tipos: ["Unidad"] }
 ]
 };
+// Catálogo en uso: viene de Supabase (tabla productos). Si no está disponible, se usa el de respaldo.
+let productosPorProveedor = PRODUCTOS_RESPALDO;
+
 
 // ─────────────────────────────────────────
 // 2. AGENDA
@@ -737,9 +1011,13 @@ function mostrarPantalla(id) {
   document.getElementById(id).style.display = "block";
   window.scrollTo({ top: 0, behavior: "smooth" });
   actualizarBarraCarrito();
-  aplicarColorColegio(id);
-  const pestanas = { "pantalla-historial": "btn-historial", "pantalla-agenda": "btn-agenda" };
-  ["btn-historial", "btn-agenda"].forEach(b => {
+  // Dentro de un colegio: fondo suave y línea de color bajo el encabezado
+  const dentroDeColegio = ["pantalla-proveedores", "pantalla-productos", "pantalla-carrito", "pantalla-agenda"].includes(id);
+  document.body.classList.toggle("en-colegio", dentroDeColegio);
+  const hd = document.querySelector(".header");
+  if (hd && hd.offsetHeight) document.documentElement.style.setProperty("--alto-header", hd.offsetHeight + "px");
+  const pestanas = { "pantalla-historial": "btn-historial", "pantalla-agenda": "btn-agenda", "pantalla-admin": "btn-admin" };
+  ["btn-historial", "btn-agenda", "btn-admin"].forEach(b => {
     const el = document.getElementById(b);
     if (el) el.classList.toggle("activo", pestanas[id] === b);
   });
@@ -761,8 +1039,12 @@ function volverInicio()      { mostrarPantalla("pantalla-colegios"); }
 function volverColegios()    { mostrarPantalla("pantalla-colegios"); }
 function volverProductos()   { mostrarPantalla("pantalla-productos"); }
 
-// El carrito se guarda solo en el dispositivo, así que se puede salir tranquilo
 function volverProveedores() {
+  const items = pedidos[proveedorActual] || [];
+  const esNoPido = items[0] === MARCA_NO_PIDO;
+  if (!esNoPido && items.length > 0) {
+    if (!confirm("Tenés productos en el carrito. ¿Querés salir igual?")) return;
+  }
   renderProveedores();
   mostrarPantalla("pantalla-proveedores");
 }
@@ -776,22 +1058,29 @@ function renderColegios() {
   cont.innerHTML = "";
   colegios.forEach(c => {
     let div = document.createElement("div");
-    div.className = "colegio colegio-color";
-    div.style.setProperty("--c", c.color);
-    div.innerHTML = `<h3>${c.nombre}</h3><button onclick="seleccionarColegio('${c.id}')">Entrar</button>`;
+    div.className = "colegio";
+    div.style.borderLeft = `8px solid ${colorColegio(c.id)}`;
+    div.innerHTML = `<h3>${c.nombre}</h3><button style="background:${colorColegio(c.id)};" onclick="seleccionarColegio('${c.id}')">Entrar</button>`;
     cont.appendChild(div);
   });
 }
 
+// Pinta con el color del colegio las barras "Volver" y muestra su nombre
+function aplicarColorColegio(id) {
+  const c = colegios.find(x => x.id === id);
+  document.documentElement.style.setProperty("--color-colegio", colorColegio(id));
+  document.documentElement.style.setProperty("--tinte-colegio", tinteColegio(colorColegio(id), 0.08));
+  document.querySelectorAll(".tag-colegio").forEach(el => { el.innerText = c ? c.nombre : ""; });
+}
+
 async function seleccionarColegio(id) {
   colegioActual = id;
+  aplicarColorColegio(id);
   document.getElementById("titulo-colegio").innerText = colegios.find(c => c.id === id).nombre;
-  await traerPedidosDeHoy();
+  await Promise.all([traerPedidosDeHoy(), cargarProductos()]);
   aplicarEstadoColegio();
-  const recuperados = restaurarCarritoLocal();
   renderProveedores();
   mostrarPantalla("pantalla-proveedores");
-  if (recuperados) mostrarToast(`🛒 Carrito recuperado (${recuperados})`);
 }
 
 // ─────────────────────────────────────────
@@ -863,16 +1152,16 @@ function _tarjetaProveedor(id, esDeHoy) {
   const enCarrito = estado === "encarrito";
   const cant = (pedidos[id] || []).length;
   let badge = "";
-  if (enCarrito)    badge = `<span class="badge-estado badge-falta">Sin enviar</span>`;
+  if (enCarrito)    badge = `<span class="badge-estado badge-falta">En carrito (${cant})</span>`;
   else if (esDeHoy) badge = `<span class="badge-estado badge-falta">Falta pedir</span>`;
 
-  div.className = "proveedor" + (esDeHoy ? " proveedor-hoy" : "") + (enCarrito ? " proveedor-encurso" : "");
+  div.className = "proveedor" + (esDeHoy ? " proveedor-hoy" : "");
   div.innerHTML = `
     <div class="prov-fila">
       <h3>${nombre}</h3>
       ${badge}
     </div>
-    <button class="btn-entrar" onclick="seleccionarProveedor('${id}')">${enCarrito ? `🛒 Seguir pedido (${cant})` : "Entrar"}</button>`;
+    <button class="btn-entrar" onclick="seleccionarProveedor('${id}')">${enCarrito ? "Seguir pedido" : "Entrar"}</button>`;
   return div;
 }
 
@@ -910,10 +1199,6 @@ function renderProveedores() {
 
   const esResuelto = id => ["pedido", "nopido"].includes(_estadoVisual(id));
 
-  // Pedidos empezados y sin enviar: van arriba de todo, en cualquier grupo que estén
-  const enCursoIds   = todos.filter(id => _estadoVisual(id) === "encarrito");
-  const fueraDeCurso = id => !enCursoIds.includes(id);
-
   // Resumen del día
   const resumen = document.createElement("div");
   resumen.className = "hoy-resumen";
@@ -931,12 +1216,8 @@ function renderProveedores() {
   cont.appendChild(resumen);
 
   // Lo de hoy: primero lo que falta, después lo ya resuelto
-  const pendientes = hoyIds.filter(id => !esResuelto(id) && fueraDeCurso(id));
+  const pendientes = hoyIds.filter(id => !esResuelto(id));
   const hechos     = hoyIds.filter(esResuelto);
-  if (enCursoIds.length) {
-    _tituloGrupo(cont, "En carrito (sin enviar)");
-    enCursoIds.forEach(id => cont.appendChild(_tarjetaProveedor(id, hoyIds.includes(id))));
-  }
   if (pendientes.length) {
     _tituloGrupo(cont, "Falta pedir");
     pendientes.forEach(id => cont.appendChild(_tarjetaProveedor(id, true)));
@@ -947,8 +1228,8 @@ function renderProveedores() {
   }
 
   // El resto, plegado (abierto solo si hoy no hay nada programado)
-  _grupoPlegable(cont, "Sin día fijo", sinDiaIds.filter(fueraDeCurso), false);
-  _grupoPlegable(cont, "Otros proveedores", otrosIds.filter(fueraDeCurso), hoyIds.length === 0);
+  _grupoPlegable(cont, "Sin día fijo", sinDiaIds, false);
+  _grupoPlegable(cont, "Otros proveedores", otrosIds, hoyIds.length === 0);
 }
 
 function seleccionarProveedor(id) {
@@ -1036,21 +1317,31 @@ function renderProductos() {
 
   lista.forEach(prod => {
     const yaAgregado = nombresEnPedido.includes(prod.nombre);
-    let div = document.createElement("div");
-    div.className = "producto";
-    let html = `<h3>${prod.nombre}</h3><div class="contenedor-opciones">`;
+    const div = document.createElement("div");
+    div.className = "producto" + (prod.sinStock ? " sin-stock" : "");
+    div.dataset.producto = prod.id;
+
+    // Sin stock: se ve, pero no se puede pedir
+    if (prod.sinStock) {
+      div.innerHTML = `<h3>${escaparHTML(prod.nombre)} <span class="badge-sinstock">SIN STOCK</span></h3>`;
+      cont.appendChild(div);
+      return;
+    }
+
+    let html = `<h3>${escaparHTML(prod.nombre)}</h3><div class="contenedor-opciones">`;
     prod.tipos.forEach(tipo => {
       html += `
         <div class="opcion-input">
-          <label>${tipo}</label>
-          <input type="number" placeholder="0" id="${tipo}-${prod.id}" oninput="bloquearOtros('${prod.id}',this)">
+          <label>${escaparHTML(tipo)}</label>
+          <input type="number" placeholder="0" data-tipo="${escaparHTML(tipo)}">
         </div>`;
     });
     html += `</div>
-      <button class="${yaAgregado ? 'pedido-listo' : ''}" onclick="agregarProducto('${prod.nombre}','${prod.id}',event)">
-        ${yaAgregado ? '✅ Agregado' : 'Agregar'}
-      </button>`;
+      <button class="${yaAgregado ? 'pedido-listo' : ''}">${yaAgregado ? '✅ Agregado' : 'Agregar'}</button>`;
     div.innerHTML = html;
+
+    div.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => bloquearOtros(div, inp)));
+    div.querySelector("button").addEventListener("click", ev => agregarProducto(prod, div, ev));
     cont.appendChild(div);
   });
 }
@@ -1065,7 +1356,6 @@ function agregarTodoDulce() {
 
   const texto = `${nombre} - ${cantidad}x${unidad}`;
   pedidos[proveedorActual].push(texto);
-  guardarCarritoLocal();
 
   document.getElementById("td_nombre").value   = "";
   document.getElementById("td_cantidad").value = "";
@@ -1089,7 +1379,6 @@ async function marcarNoPido() {
   if (!guardado) return mostrarToast("⚠️ No se pudo guardar. Probá de nuevo");
 
   pedidos[proveedorActual] = [MARCA_NO_PIDO];
-  guardarCarritoLocal();
   await traerPedidosDeHoy();
 
   // Copiar al portapapeles
@@ -1102,32 +1391,61 @@ async function marcarNoPido() {
   } else { _clipFallback(texto); done(); }
 }
 
-// Saca la marca NO PIDO de hoy (borra esa fila en Supabase) para poder hacer el pedido
-async function cancelarNoPido() {
-  if (!confirm("¿Cancelar el NO PIDO de este proveedor?")) return;
+function copiarPedido() {
+  const items = pedidos[proveedorActual] || [];
+  if (items.length === 0) return alert("El carrito está vacío");
 
-  const { error } = await db.from("pedidos_enviados").delete()
-    .eq("fecha", hoyArgentina())
-    .eq("colegio_id", colegioActual)
-    .eq("proveedor_id", proveedorActual)
-    .eq("estado", "no_pido");
-  if (error) {
-    console.error(error);
-    return mostrarToast("⚠️ No se pudo cancelar. Probá de nuevo");
+  const colNom  = colegios.find(c => c.id === colegioActual).nombre.toUpperCase();
+  const provNom = proveedoresComunes.find(p => p.id === proveedorActual)?.nombre || proveedorActual.toUpperCase();
+  let texto = `*${colNom}*\n\n*${provNom}*\n\n`;
+
+  if (items[0] === MARCA_NO_PIDO) {
+    texto += `NO PIDO`;
+  } else {
+    items.forEach(item => {
+      if (item.includes(" - ")) {
+        const [nombre, detalle] = item.split(" - ");
+        const [cant, tipo] = detalle.split("x");
+        texto += `- ${cant} ${tipo.toUpperCase()} ${nombre}\n`;
+      } else {
+        texto += `- ${item}\n`;
+      }
+    });
   }
 
-  // Si falta el permiso de borrado, Supabase no da error: simplemente no borra.
-  // Por eso se vuelve a consultar para confirmar que la marca desapareció.
-  await traerPedidosDeHoy();
-  const sigue = pedidosHoy.some(r =>
-    r.colegio_id === colegioActual && r.proveedor_id === proveedorActual && r.estado === "no_pido");
-  if (sigue) return mostrarToast("⚠️ No se pudo cancelar: falta el permiso de borrado en Supabase");
+  // Intentá clipboard moderno, si no funciona usá el fallback
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto)
+      .then(() => _pedidoCopiado(colNom, provNom, texto))
+      .catch(() => _clipFallbackYCopiar(texto, colNom, provNom));
+  } else {
+    _clipFallbackYCopiar(texto, colNom, provNom);
+  }
+}
 
-  pedidos[proveedorActual] = [];
-  delete proveedoresPedidos[proveedorActual];
-  guardarCarritoLocal();
-  mostrarToast("NO PIDO cancelado ✅");
-  renderProductos();
+function _clipFallbackYCopiar(texto, colNom, provNom) {
+  const ta = document.createElement("textarea");
+  ta.value = texto;
+  ta.style.position = "fixed";
+  ta.style.top = "0";
+  ta.style.left = "0";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  ta.setSelectionRange(0, 99999);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch(e) {}
+  document.body.removeChild(ta);
+
+  if (ok) {
+    _pedidoCopiado(colNom, provNom, texto);
+  } else {
+    // Último recurso: mostrar el texto para copiar manualmente
+    prompt("Copiá este texto manualmente (Ctrl+A, Ctrl+C):", texto);
+  }
 }
 
 function _clipFallback(texto) {
@@ -1171,7 +1489,6 @@ function renderCarrito() {
 
 function eliminar(index) {
   pedidos[proveedorActual].splice(index, 1);
-  guardarCarritoLocal();
   renderCarrito();
 }
 
@@ -1232,7 +1549,6 @@ async function _pedidoCopiado(colNom, provNom, texto) {
 
   proveedoresPedidos[proveedorActual] = true;
   if (!esNoPido) pedidos[proveedorActual] = [];
-  guardarCarritoLocal();
   await traerPedidosDeHoy();
 
   mostrarToast("✅ ¡Copiado y guardado! Pegalo en WhatsApp 📋");
@@ -1243,26 +1559,23 @@ async function _pedidoCopiado(colNom, provNom, texto) {
 // 10. AGREGAR PRODUCTO
 // ─────────────────────────────────────────
 
-function bloquearOtros(id, actual) {
-  document.querySelectorAll(`[id*='-${id}']`).forEach(inp => {
+// Al cargar cantidad en una unidad, se vacían las otras unidades del mismo producto
+function bloquearOtros(card, actual) {
+  card.querySelectorAll("input").forEach(inp => {
     if (inp !== actual) inp.value = "";
   });
 }
 
-function agregarProducto(nombre, id, event) {
+function agregarProducto(prod, card, event) {
   let texto = "";
-  document.querySelectorAll(`[id*='-${id}']`).forEach(input => {
-    if (Number(input.value) > 0) {
-      const tipo = input.id.split('-')[0];
-      texto = `${nombre} - ${input.value}x${tipo}`;
-    }
+  card.querySelectorAll("input").forEach(input => {
+    if (Number(input.value) > 0) texto = `${prod.nombre} - ${input.value}x${input.dataset.tipo}`;
   });
   if (!texto) return alert("Ingresá una cantidad");
   pedidos[proveedorActual].push(texto);
-  guardarCarritoLocal();
   event.target.classList.add("pedido-listo");
   event.target.innerText = "✅ Agregado";
-  document.querySelectorAll(`[id*='-${id}']`).forEach(i => i.value = "");
+  card.querySelectorAll("input").forEach(i => i.value = "");
   mostrarToast("Agregado ✅");
   actualizarBarraCarrito();
 }
@@ -1279,16 +1592,15 @@ async function verHistorial() {
     cont.innerHTML = "<li style='color:#999;'>No hay pedidos realizados hoy.</li>";
   } else {
     historial.forEach(p => {
-      const color = colorColegio(p.colegioId);
       const esNoPido = p.contenido.trim().endsWith("NO PIDO");
       const lineas = p.contenido.split("\n").filter(l => l.startsWith("- "));
       const itemsHTML = esNoPido
         ? `<span style="color:#e00;font-weight:bold;">🚫 NO PIDO</span>`
         : lineas.map(l => `<span style="display:block;font-size:0.85rem;color:#333;">${l}</span>`).join("");
       const li = document.createElement("li");
-      li.style.cssText = `flex-direction:column;align-items:flex-start;gap:6px;border-left:6px solid ${color};`;
+      li.style.cssText = "flex-direction:column;align-items:flex-start;gap:6px;";
       li.innerHTML = `
-        <strong style="font-size:0.95rem;"><span style="color:${color}">${p.colegio}</span> — ${p.proveedor}</strong>
+        <strong style="font-size:0.95rem;"><span class="punto-colegio" style="background:${colorColegio(p.colegioId)};"></span>${p.colegio} — ${p.proveedor}</strong>
         ${p.usuario ? `<span style="font-size:0.78rem;color:#777;">👤 ${escaparHTML(p.usuario)}${p.hora ? " · " + p.hora : ""}${p.modificado ? " (modificado)" : ""}</span>` : ""}
         <div style="padding:6px 10px;background:#f5f5f5;border-radius:6px;width:100%;">${itemsHTML}</div>`;
       cont.appendChild(li);
@@ -1321,7 +1633,7 @@ function verAgenda() {
   const diasSemana = ["domingo","lunes","martes","miercoles","jueves","viernes","sabado"];
   const diaHoy     = diasSemana[new Date().getDay()];
 
-  let html = `<h3 style="text-align:center;color:${colorColegio(colegioActual)};">Agenda ${colegioActual.toUpperCase()}</h3>`;
+  let html = `<h3 style="text-align:center;">Agenda ${colegioActual.toUpperCase()}</h3>`;
 
   if (agendaData.sin_dia && agendaData.sin_dia.length > 0) {
     html += `

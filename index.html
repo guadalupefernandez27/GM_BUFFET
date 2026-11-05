@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>GM Catering</title>
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -22,6 +23,7 @@
   <div class="header-der" id="header-der" style="display:none;">
     <button id="btn-historial" onclick="verHistorial()" aria-label="Historial de pedidos de hoy"><span class="ico">📄</span><span class="lbl">Historial</span></button>
     <button id="btn-agenda" onclick="verAgenda()" aria-label="Agenda semanal"><span class="ico">📅</span><span class="lbl">Agenda</span></button>
+    <button id="btn-admin" onclick="verAdmin()" aria-label="Administrar productos" style="display:none;"><span class="ico">⚙️</span><span class="lbl">Admin</span></button>
     <button onclick="cerrarSesion()" aria-label="Cerrar sesión"><span class="ico">🚪</span><span class="lbl">Salir</span></button>
   </div>
 </div>
@@ -48,8 +50,9 @@
 
 <!-- PROVEEDORES -->
 <div id="pantalla-proveedores" class="pantalla" style="display:none;">
-  <div class="sticky-nav">
+  <div class="sticky-nav nav-colegio">
     <button onclick="volverColegios()">← Volver</button>
+    <span class="tag-colegio"></span>
   </div>
   
   <h2 id="titulo-colegio"></h2>
@@ -58,22 +61,22 @@
 
 <!-- PRODUCTOS -->
 <div id="pantalla-productos" class="pantalla" style="display:none;">
-  <div class="sticky-nav">
+  <div class="sticky-nav nav-colegio">
     <button onclick="volverProveedores()">← Volver</button>
+    <span class="tag-colegio"></span>
   </div>
   
-  <div class="chip-colegio" data-chip-colegio></div>
   <h2 id="titulo-proveedor"></h2>
   <div id="productos"></div>
 </div>
 
 <!-- CARRITO -->
 <div id="pantalla-carrito" class="pantalla" style="display:none;">
-  <div class="sticky-nav">
+  <div class="sticky-nav nav-colegio">
     <button onclick="volverProductos()">← Volver</button>
+    <span class="tag-colegio"></span>
   </div>
  
-  <div class="chip-colegio" data-chip-colegio></div>
   <h2>Carrito</h2>
   <ul id="carrito"></ul>
   <button onclick="copiarPedido()">Copiar Pedido</button>
@@ -91,12 +94,40 @@
 
 <!-- AGENDA -->
 <div id="pantalla-agenda" class="pantalla" style="display:none;">
-  <div class="sticky-nav">
+  <div class="sticky-nav nav-colegio">
     <button onclick="volverInicio()">← Volver</button>
+    <span class="tag-colegio"></span>
   </div>
   
   <h2>Agenda</h2>
   <div id="agenda"></div>
+</div>
+
+<!-- ADMIN: PRODUCTOS -->
+<div id="pantalla-admin" class="pantalla" style="display:none;">
+  <div class="sticky-nav">
+    <button onclick="volverInicio()">← Volver</button>
+  </div>
+
+  <h2>Administrar productos</h2>
+  <div id="admin-aviso"></div>
+
+  <div id="admin-panel">
+    <select id="admin-proveedor" onchange="adminCambiarProveedor()" aria-label="Proveedor"></select>
+    <input id="admin-buscar" type="search" placeholder="Buscar producto…" oninput="adminBuscar()" autocomplete="off">
+    <div id="admin-resumen"></div>
+
+    <details class="grupo" id="admin-nuevo">
+      <summary>➕ Agregar producto</summary>
+      <div class="contenido admin-form">
+        <input id="nuevo-nombre" type="text" class="admin-nombre" placeholder="Nombre del producto" autocomplete="off">
+        <div id="nuevo-chips"></div>
+        <button onclick="adminAgregar()">Agregar a este proveedor</button>
+      </div>
+    </details>
+
+    <div id="admin-lista"></div>
+  </div>
 </div>
 
 <!-- BARRA DE CARRITO (fija abajo) -->

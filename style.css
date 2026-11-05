@@ -12,8 +12,7 @@ body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f2f2f
   align-items: center;
   padding: 8px 15px; 
   z-index: 100;
-  /* Franja de color del colegio (no suma altura) + sombra */
-  box-shadow: 0 5px 0 var(--colegio, transparent), 0 2px 10px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 .header-izq { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .logo-principal { 
@@ -35,14 +34,14 @@ body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f2f2f
 
 /* PANTALLAS Y CARDS */
 .pantalla { padding: 15px; }
-h2 { text-align: center; color: var(--acento); }
+h2 { text-align: center; color: #ff6a00; }
 .colegio, .proveedor, .producto {
   background: white; padding: 15px; margin-bottom: 12px;
   border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 /* PRODUCTOS E INPUTS */
-.producto { border-left: 5px solid var(--acento); }
+.producto { border-left: 5px solid #ff6a00; }
 .contenedor-opciones { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
 .opcion-input { display: flex; flex-direction: column; width: 45%; }
 .opcion-input label { font-size: 0.7rem; color: #666; margin-bottom: 2px; }
@@ -71,7 +70,7 @@ li button { width: auto; padding: 5px 10px; }
   box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 .titulo-dia {
-  background: var(--acento);
+  background: #ff6a00;
   color: white;
   padding: 8px 15px;
   font-weight: bold;
@@ -103,8 +102,8 @@ li button { width: auto; padding: 5px 10px; }
 
 /* El día de HOY (El héroe de la pantalla) */
 .dia-actual {
-  border: 3px solid var(--acento) !important;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+  border: 3px solid #ff6a00 !important;
+  box-shadow: 0 5px 15px rgba(255,106,0,0.2);
   transform: scale(1);
   filter: grayscale(0);
   opacity: 1;
@@ -112,7 +111,7 @@ li button { width: auto; padding: 5px 10px; }
 
 /* Etiqueta HOY (visible solo si es el día actual) */
 .etiqueta-hoy {
-  background: var(--acento);
+  background: #ff6a00;
   color: white;
   padding: 2px 8px;
   border-radius: 4px;
@@ -127,7 +126,7 @@ li button { width: auto; padding: 5px 10px; }
   position: sticky;
   top: 105px;
   z-index: 95;
-  background: var(--acento); /* Color del colegio para que resalte el cabezal */
+  background: #ff6a00; /* Naranja para que resalte el cabezal */
   color: white;
   padding: 10px;
   margin-bottom: 15px;
@@ -152,12 +151,12 @@ li button { width: auto; padding: 5px 10px; }
   margin-top: 10px;
   padding: 10px;
   border-radius: 5px;
-  border: 1px solid var(--acento);
+  border: 1px solid #ff6a00;
 }
 /* Resaltado para el día actual */
 .dia-actual {
-  border: 3px solid var(--acento) !important;
-  box-shadow: 0 0 10px rgba(0,0,0,0.15);
+  border: 3px solid #ff6a00 !important;
+  box-shadow: 0 0 10px rgba(255,106,0,0.3);
 }
 
 /* UTILS */
@@ -176,6 +175,7 @@ li button { width: auto; padding: 5px 10px; }
   z-index: 999;
   white-space: nowrap;
 }
+.toast.show { opacity: 1; }
 .toast.show { opacity: 1; }
 .carrito-fijo { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; z-index: 99; }
 
@@ -202,7 +202,7 @@ li button { width: auto; padding: 5px 10px; }
 .hoy-resumen { text-align: center; margin-bottom: 16px; }
 .hoy-dia   { color: #555; font-size: 0.9rem; margin-bottom: 8px; }
 .hoy-barra { background: #ddd; border-radius: 4px; height: 8px; overflow: hidden; }
-.hoy-barra div { height: 100%; background: var(--acento); transition: width 0.3s; }
+.hoy-barra div { height: 100%; background: #ff6a00; transition: width 0.3s; }
 .hoy-barra.completa div { background: #4CAF50; }
 .hoy-texto { color: #555; font-size: 0.8rem; margin-top: 6px; }
 
@@ -211,25 +211,10 @@ li button { width: auto; padding: 5px 10px; }
 .prov-fila h3 { margin: 0; font-size: 1.05rem; }
 .prov-quien { font-size: 0.78rem; color: #777; margin-top: 4px; }
 
-.proveedor-hoy { border: 2px solid var(--acento); }
-/* Entrar: solo contorno del color del colegio. Lo único relleno es "Seguir pedido" */
-.proveedor .btn-entrar { background: #fff; color: var(--acento); border: 2px solid var(--acento); margin-top: 10px; }
-.proveedor-hoy .btn-entrar { padding: 14px; font-size: 1rem; }
-.proveedor-encurso {
-  border: 3px solid var(--acento);
-  background: #fff;
-  background: color-mix(in srgb, var(--acento) 8%, white);
-}
-.proveedor-encurso .btn-entrar {
-  background: var(--acento); color: #fff;
-  padding: 16px; font-size: 1.05rem;
-}
-
-.badge-falta {
-  background: #f4f4f4; color: var(--acento); border: 1px solid var(--acento);
-  background: color-mix(in srgb, var(--acento) 10%, white);
-  color: color-mix(in srgb, var(--acento) 80%, black);
-}
+.proveedor-hoy { border: 2px solid #ff6a00; }
+.proveedor .btn-entrar { background: #333; margin-top: 10px; }
+.proveedor-hoy .btn-entrar { background: #ff6a00; padding: 14px; font-size: 1rem; }
+.badge-falta { background: #fff1e6; color: #a64200; border: 1px solid #ff6a00; }
 
 .proveedor-listo { padding: 10px 12px; box-shadow: none; }
 .proveedor-listo.ok     { background: #eaffea; border: 1px solid #4CAF50; }
@@ -253,12 +238,12 @@ details.grupo .contenido { padding: 0 10px 4px; }
 .barra-carrito {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 98;
   display: none; align-items: center; justify-content: space-between;
-  background: var(--acento); color: #fff; font-weight: bold; font-size: 1.05rem;
+  background: #ff6a00; color: #fff; font-weight: bold; font-size: 1.05rem;
   padding: 16px 20px calc(16px + env(safe-area-inset-bottom, 0px));
   cursor: pointer; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.25);
 }
 .barra-carrito .cant {
-  background: #fff; color: var(--acento); border-radius: 20px;
+  background: #fff; color: #ff6a00; border-radius: 20px;
   padding: 2px 12px; margin-left: 8px; font-size: 0.9rem;
 }
 #pantalla-productos { padding-bottom: 100px; }
@@ -278,31 +263,84 @@ body.con-barra .toast { bottom: 90px; }
 .header-der button.activo { background: #ff6a00; }
 @media (max-width: 420px) { .nombre-marca { font-size: 0.95rem; } }
 
+
+/* ═══════════════════════════════════════
+   PRODUCTOS: SIN STOCK
+   ═══════════════════════════════════════ */
+.producto.sin-stock { border-left-color: #999; background: #f3f3f3; }
+.producto.sin-stock h3 { color: #777; margin: 0; }
+.badge-sinstock {
+  background: #555; color: #fff; font-size: 0.7rem; padding: 2px 8px;
+  border-radius: 12px; vertical-align: middle; margin-left: 6px; white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════
+   PANEL DE ADMINISTRACIÓN DE PRODUCTOS
+   ═══════════════════════════════════════ */
+select {
+  width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc;
+  font-size: 1rem; background: #fff; margin-bottom: 10px;
+}
+.aviso-admin {
+  background: #fff1e6; border: 1px solid #ff6a00; color: #a64200;
+  padding: 12px; border-radius: 10px; margin-bottom: 12px; font-size: 0.9rem;
+}
+#admin-buscar { margin-bottom: 4px; }
+#admin-resumen { text-align: center; color: #555; font-size: 0.8rem; margin: 6px 0 12px; }
+.admin-form { padding: 0 12px 12px; }
+.admin-nombre { text-align: left; font-weight: bold; text-transform: uppercase; }
+.admin-card.oculto { opacity: 0.55; border-left-color: #999; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; align-items: center; }
+.chip {
+  padding: 6px 12px; border-radius: 20px; border: 1px solid #bbb; background: #fff;
+  color: #555; font-size: 0.85rem; cursor: pointer; user-select: none;
+}
+.chip.on { background: #ff6a00; border-color: #ff6a00; color: #fff; font-weight: bold; }
+.chip.mas { background: #333; border-color: #333; color: #fff; }
+.chip-otra { width: 110px; padding: 6px 10px; font-size: 0.85rem; border-radius: 20px; }
+
+.admin-fila { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 4px; }
+.admin-switch { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #333; cursor: pointer; }
+.admin-switch input { width: auto; padding: 0; transform: scale(1.3); margin-right: 4px; }
+.admin-fila .btn-icono { width: auto; padding: 8px 14px; margin: 0; background: #555; }
+.admin-fila .btn-icono[disabled] { opacity: 0.35; cursor: default; }
+.admin-fila .btn-borrar { background: #e00; margin-left: auto; }
+
+@media (max-width: 480px) { body.es-admin .nombre-marca { display: none; } }
+
+.chip.fija { cursor: default; }
+.chip.edit { background: #fff; border-style: dashed; color: #333; }
+
+
 /* ═══════════════════════════════════════
    COLOR POR COLEGIO
-   --acento = color del colegio dentro de un colegio, naranja GM fuera de ellos
-   (los colores se definen en script.js, en la lista "colegios")
+   Dentro de un colegio: fondo suave, línea de color bajo el encabezado
+   y una etiqueta con el nombre.
    ═══════════════════════════════════════ */
-/* Tarjetas de la pantalla "Seleccionar Colegio" */
-.colegio-color {
-  border-left: 8px solid var(--c);
-  background: white;
-  background: color-mix(in srgb, var(--c) 8%, white);
-}
-.colegio-color h3 { color: var(--c); }
-.colegio-color button { background: var(--c); }
+.sticky-nav { top: var(--alto-header, 65px); }
 
-/* Etiqueta con el nombre del colegio (Productos y Carrito) */
-.chip-colegio {
-  width: fit-content;
-  margin: 0 auto 8px;
-  padding: 3px 14px;
-  border-radius: 20px;
-  background: var(--colegio);
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-.chip-colegio:empty { display: none; }
+body.en-colegio { background: var(--tinte-colegio, #f2f2f2); }
+body.en-colegio .header { border-bottom: 4px solid var(--color-colegio, #ff6a00); }
 
-body { --acento: var(--colegio, #ff6a00); }
+.sticky-nav.nav-colegio {
+  background: var(--tinte-colegio, #f2f2f2);
+  margin: -15px -15px 12px;           /* ocupa todo el ancho (la pantalla tiene 15px de margen) */
+  padding: 8px 15px;
+  border-bottom: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.sticky-nav.nav-colegio button { width: auto; margin: 0; padding: 9px 16px; background: #333; color: #fff; }
+
+.tag-colegio {
+  background: var(--color-colegio, #333); color: #fff;
+  padding: 6px 16px; border-radius: 20px; font-size: 0.95rem; font-weight: bold;
+}
+
+#titulo-colegio { color: var(--color-colegio, #ff6a00); }
+.hoy-barra div { background: var(--color-colegio, #ff6a00); }
+
+.punto-colegio {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  margin-right: 7px; vertical-align: baseline;
+}
