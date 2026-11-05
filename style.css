@@ -344,3 +344,176 @@ body.en-colegio .header { border-bottom: 4px solid var(--color-colegio, #ff6a00)
   display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   margin-right: 7px; vertical-align: baseline;
 }
+/* ═══════════════════════════════════════════════════════════
+   REFINAMIENTO VISUAL — pegar AL FINAL de style.css
+   Idea: fondo neutro, el color del colegio solo como acento
+   (borde izquierdo, título, botón principal, barra de progreso).
+   ═══════════════════════════════════════════════════════════ */
+
+/* ---------- Variables (todo se deriva de --color-colegio) ---------- */
+body {
+  --brand:      var(--color-colegio, #ff6a00);
+  --brand-soft: color-mix(in srgb, var(--brand) 12%, white);
+  --brand-ink:  color-mix(in srgb, var(--brand) 78%, black);
+  --ink:    #1f2430;
+  --muted:  #6b7280;
+  --line:   #e5e7ec;
+  --ok:     #3f9d5a;
+  --ok-soft:#eaf6ee;
+  --ok-ink: #2d7a45;
+  --danger: #b3261e;
+  --danger-soft: #fdf1f0;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 6px rgba(16,24,40,.04);
+  background: #f4f5f8;
+  color: var(--ink);
+}
+/* fuera de un colegio (login, lista de colegios, admin) vuelve el naranja GM */
+body:not(.en-colegio) { --color-colegio: #ff6a00; }
+
+/* ---------- Header ---------- */
+.header { background: #262a33; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+body.en-colegio .header { border-bottom: 3px solid var(--color-colegio); }
+.header-der button { background: rgba(255,255,255,.08); border-radius: 10px; }
+.header-der button.activo { background: var(--brand); }
+
+/* ---------- Títulos ---------- */
+h2 { color: var(--brand); font-weight: 600; font-size: 1.35rem; margin: 8px 0 16px; }
+
+/* ---------- Tarjetas ---------- */
+.colegio, .proveedor, .producto {
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+.producto { border-left: 4px solid var(--brand); }
+.producto h3 { font-size: 1rem; font-weight: 600; margin: 0 0 10px; }
+.producto.sin-stock h3 { margin: 0; }
+
+/* ---------- Inputs ---------- */
+input, select { border: 1px solid #d9dce3; border-radius: 10px; }
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.opcion-input { width: auto; flex: 1 1 90px; }
+.opcion-input label { color: var(--muted); }
+
+/* ---------- Producto: cantidad + "Agregar" en la misma fila ---------- */
+.producto:has(.contenedor-opciones):not(:has(#td_nombre)) {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 10px;
+  align-items: end;
+}
+.producto:has(.contenedor-opciones):not(:has(#td_nombre)) > h3 { grid-column: 1 / -1; }
+.producto:has(.contenedor-opciones):not(:has(#td_nombre)) .contenedor-opciones { margin: 0; }
+.producto:has(.contenedor-opciones):not(:has(#td_nombre)) > button {
+  width: auto; margin: 0; padding: 11px 20px;
+}
+.producto button { background: var(--brand); border-radius: 10px; font-weight: 600; }
+.producto button.pedido-listo {
+  background: var(--ok-soft) !important;
+  color: var(--ok-ink) !important;
+}
+
+/* ---------- Banner de producto (¿No pedís hoy? / NO PIDO / Ya pediste) ---------- */
+.producto.banner-aviso  { border-left-color: #d9a09b; }
+.producto.banner-aviso h3 { color: var(--ink); margin-bottom: 4px; }
+.producto.banner-nopido { border-left-color: #d9a09b; }
+.producto.banner-nopido h3 { color: var(--danger); margin-bottom: 4px; }
+.producto.banner-ok     { border-left-color: var(--ok); }
+.producto.banner-ok h3  { color: var(--ok-ink); margin-bottom: 4px; }
+.banner-txt { font-size: .85rem; color: var(--muted); margin: 0 0 10px; }
+
+.btn-rojo {
+  background: #fff !important;
+  color: var(--danger) !important;
+  border: 1.5px solid #e8b9b5 !important;
+  width: auto !important;
+  padding: 9px 18px !important;
+}
+.btn-verde { background: var(--ok) !important; width: auto !important; padding: 9px 18px !important; }
+.btn-gris  { background: #eceef2 !important; color: var(--muted) !important; width: auto !important; padding: 9px 18px !important; }
+
+/* ---------- Lista de colegios ---------- */
+#lista-colegios .colegio {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border-left: 4px solid var(--c, #ff6a00);
+}
+#lista-colegios .colegio h3 { margin: 0; font-weight: 600; }
+#lista-colegios .colegio button {
+  width: auto; margin: 0; padding: 9px 22px;
+  background: var(--c, #ff6a00);
+}
+
+/* ---------- Proveedores ---------- */
+.proveedor-hoy { border: 1px solid var(--line); border-left: 4px solid var(--brand); }
+.prov-fila h3 { font-size: 1rem; font-weight: 600; }
+
+/* "Entrar": compacto y a la derecha. Tonal por defecto, sólido solo si es de hoy */
+.proveedor .btn-entrar {
+  width: auto; display: block; margin: 10px 0 0 auto;
+  padding: 9px 22px; font-size: .92rem;
+  background: var(--brand-soft); color: var(--brand-ink);
+}
+.proveedor-hoy .btn-entrar {
+  padding: 9px 22px; font-size: .92rem;
+  background: var(--brand); color: #fff;
+}
+
+/* Ya resueltos: blancos, con una raya verde/roja apagada */
+.proveedor-listo.ok     { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--ok); }
+.proveedor-listo.nopido { background: #fff; border: 1px solid var(--line); border-left: 4px solid #d9a09b; }
+.proveedor-listo .btn-chico {
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--line); padding: 5px 14px; font-weight: 600;
+}
+
+/* Badges sin borde, más suaves */
+.badge-estado { font-weight: 600; border: none; }
+.badge-falta  { background: var(--brand-soft); color: var(--brand-ink); border: none; }
+.badge-pedido { background: var(--ok-soft); color: var(--ok-ink); border: none; }
+.badge-nopido { background: var(--danger-soft); color: var(--danger); border: none; }
+
+/* Resumen del día */
+.hoy-dia   { color: var(--ink); font-weight: 600; }
+.hoy-barra { height: 6px; background: #e3e5ea; }
+.hoy-texto { color: var(--muted); }
+.grupo-titulo { font-size: .8rem; font-weight: 600; color: var(--muted); margin: 18px 0 8px; }
+
+details.grupo { border-color: var(--line); border-radius: 14px; }
+details.grupo summary { color: var(--muted); font-weight: 600; }
+
+/* ---------- Barra superior "Volver" + etiqueta del colegio ---------- */
+.sticky-nav button,
+.sticky-nav.nav-colegio button {
+  background: #fff; color: var(--ink);
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+  font-weight: 600;
+}
+.tag-colegio {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+
+/* ---------- Carrito ---------- */
+#pantalla-carrito > button { background: var(--brand); }
+.barra-carrito { background: var(--brand); }
+.barra-carrito .cant { color: var(--brand-ink); }
+
+/* ---------- Agenda ---------- */
+.titulo-dia { background: var(--brand-soft); color: var(--brand-ink); }
+.etiqueta-hoy { background: var(--brand); }
+.dia-actual { border: 2px solid var(--brand) !important; box-shadow: var(--shadow); }
+.sin-dia-sticky {
+  background: #fff; color: var(--ink);
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.sin-dia-lista { border: 1px solid var(--line); }
+
+/* ---------- Admin ---------- */
+.chip.on { background: var(--brand); border-color: var(--brand); }
+.admin-fila .btn-borrar { background: var(--danger); }
+.aviso-admin { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-ink); }

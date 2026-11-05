@@ -912,8 +912,8 @@ const PRODUCTOS_RESPALDO = {
     { nombre: "CEBOLLA VERDEO (KG)",      id: "verd_cebolla_verd", tipos: ["KG"] }
   ],
   todo_dulce: [
-  { nombre: "AGREGAR MANUALMENTE", id: "td_manual", tipos: ["Unidad"] }
-]
+    { nombre: "AGREGAR MANUALMENTE", id: "td_manual", tipos: ["Unidad"] }
+  ]
 };
 // Catálogo en uso: viene de Supabase (tabla productos). Si no está disponible, se usa el de respaldo.
 let productosPorProveedor = PRODUCTOS_RESPALDO;
@@ -1059,8 +1059,8 @@ function renderColegios() {
   colegios.forEach(c => {
     let div = document.createElement("div");
     div.className = "colegio";
-    div.style.borderLeft = `8px solid ${colorColegio(c.id)}`;
-    div.innerHTML = `<h3>${c.nombre}</h3><button style="background:${colorColegio(c.id)};" onclick="seleccionarColegio('${c.id}')">Entrar</button>`;
+    div.style.setProperty("--c", colorColegio(c.id));
+    div.innerHTML = `<h3>${c.nombre}</h3><button onclick="seleccionarColegio('${c.id}')">Entrar</button>`;
     cont.appendChild(div);
   });
 }
@@ -1255,34 +1255,29 @@ function renderProductos() {
   const yaPidio  = !esNoPido && itemsActuales.length > 0;
 
   let banner = document.createElement("div");
-  banner.className = "producto";
 
   if (esNoPido) {
-    banner.style.borderLeft = "5px solid #e00";
+    banner.className = "producto banner-nopido";
     banner.innerHTML = `
-      <h3 style="color:#e00;margin:0 0 6px;">🚫 NO PIDO</h3>
-      <p style="font-size:0.85rem;color:#666;margin:0 0 10px;">
-        Este proveedor ya fue marcado como <strong>NO PIDO</strong>.<br>
-        Si querés hacer un pedido, cancelá la marca primero.
-      </p>
+      <h3>🚫 NO PIDO</h3>
+      <p class="banner-txt">Este proveedor ya fue marcado como <strong>NO PIDO</strong>.<br>Si querés hacer un pedido, cancelá la marca primero.</p>
       <button class="btn-gris" onclick="cancelarNoPido()">↩ Cancelar NO PIDO</button>`;
     cont.appendChild(banner);
     return;
 
   } else if (yaPidio) {
-    banner.style.borderLeft = "5px solid #4CAF50";
+    banner.className = "producto banner-ok";
     const resumen = itemsActuales.map(i => i.split(" - ")[0]).join(", ");
     banner.innerHTML = `
-      <h3 style="color:#4CAF50;margin:0 0 4px;">✅ Ya pediste</h3>
-      <p style="font-size:0.85rem;color:#666;margin:0 0 4px;">En carrito: <strong>${resumen}</strong></p>
-      <p style="font-size:0.8rem;color:#999;margin:0 0 10px;">Podés seguir agregando o ir al carrito.</p>
+      <h3>✅ Ya pediste</h3>
+      <p class="banner-txt">En carrito: <strong>${resumen}</strong>. Podés seguir agregando o ir al carrito.</p>
       <button class="btn-verde" onclick="irCarrito()">🛒 Ver carrito</button>`;
 
   } else {
-    banner.style.borderLeft = "5px solid #e00";
+    banner.className = "producto banner-aviso";
     banner.innerHTML = `
-      <h3 style="color:#e00;margin:0 0 4px;">¿No pedís hoy?</h3>
-      <p style="font-size:0.8rem;color:#666;margin:0 0 8px;">Marcá NO PIDO y quedará registrado.</p>
+      <h3>¿No pedís hoy?</h3>
+      <p class="banner-txt">Marcá NO PIDO y quedará registrado.</p>
       <button class="btn-rojo" onclick="marcarNoPido()">🚫 NO PIDO</button>`;
   }
 
@@ -1292,28 +1287,28 @@ function renderProductos() {
   const nombresEnPedido = itemsActuales.map(item => item.split(" - ")[0]);
 
   if (proveedorActual === "todo_dulce") {
-  const div = document.createElement("div");
-  div.className = "producto";
-  div.innerHTML = `
-    <h3>✏️ Producto personalizado</h3>
-    <div class="contenedor-opciones" style="flex-direction:column;gap:8px;">
-      <div class="opcion-input" style="width:100%;">
-        <label>Nombre del producto</label>
-        <input type="text" id="td_nombre" placeholder="Ej: Alfajor triple chocolate">
-      </div>
-      <div class="opcion-input" style="width:100%;">
-        <label>Cantidad y unidad</label>
-        <div style="display:flex;gap:8px;">
-          <input type="number" id="td_cantidad" placeholder="0" style="width:30%;">
-          <input type="text"   id="td_unidad"   placeholder="Ej: Caja, Unidad, Display" style="width:70%;">
+    const div = document.createElement("div");
+    div.className = "producto";
+    div.innerHTML = `
+      <h3>✏️ Producto personalizado</h3>
+      <div class="contenedor-opciones" style="flex-direction:column;gap:8px;">
+        <div class="opcion-input" style="width:100%;">
+          <label>Nombre del producto</label>
+          <input type="text" id="td_nombre" placeholder="Ej: Alfajor triple chocolate">
+        </div>
+        <div class="opcion-input" style="width:100%;">
+          <label>Cantidad y unidad</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" id="td_cantidad" placeholder="0" style="width:30%;">
+            <input type="text"   id="td_unidad"   placeholder="Ej: Caja, Unidad, Display" style="width:70%;">
+          </div>
         </div>
       </div>
-    </div>
-    <button onclick="agregarTodoDulce()">Agregar</button>
-  `;
-  cont.appendChild(div);
-  return; // no renderiza la lista genérica
-}
+      <button onclick="agregarTodoDulce()">Agregar</button>
+    `;
+    cont.appendChild(div);
+    return; // no renderiza la lista genérica
+  }
 
   lista.forEach(prod => {
     const yaAgregado = nombresEnPedido.includes(prod.nombre);
@@ -1345,6 +1340,7 @@ function renderProductos() {
     cont.appendChild(div);
   });
 }
+
 function agregarTodoDulce() {
   const nombre   = document.getElementById("td_nombre").value.trim();
   const cantidad = document.getElementById("td_cantidad").value.trim();
@@ -1389,63 +1385,6 @@ async function marcarNoPido() {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(texto).then(done).catch(() => { _clipFallback(texto); done(); });
   } else { _clipFallback(texto); done(); }
-}
-
-function copiarPedido() {
-  const items = pedidos[proveedorActual] || [];
-  if (items.length === 0) return alert("El carrito está vacío");
-
-  const colNom  = colegios.find(c => c.id === colegioActual).nombre.toUpperCase();
-  const provNom = proveedoresComunes.find(p => p.id === proveedorActual)?.nombre || proveedorActual.toUpperCase();
-  let texto = `*${colNom}*\n\n*${provNom}*\n\n`;
-
-  if (items[0] === MARCA_NO_PIDO) {
-    texto += `NO PIDO`;
-  } else {
-    items.forEach(item => {
-      if (item.includes(" - ")) {
-        const [nombre, detalle] = item.split(" - ");
-        const [cant, tipo] = detalle.split("x");
-        texto += `- ${cant} ${tipo.toUpperCase()} ${nombre}\n`;
-      } else {
-        texto += `- ${item}\n`;
-      }
-    });
-  }
-
-  // Intentá clipboard moderno, si no funciona usá el fallback
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(texto)
-      .then(() => _pedidoCopiado(colNom, provNom, texto))
-      .catch(() => _clipFallbackYCopiar(texto, colNom, provNom));
-  } else {
-    _clipFallbackYCopiar(texto, colNom, provNom);
-  }
-}
-
-function _clipFallbackYCopiar(texto, colNom, provNom) {
-  const ta = document.createElement("textarea");
-  ta.value = texto;
-  ta.style.position = "fixed";
-  ta.style.top = "0";
-  ta.style.left = "0";
-  ta.style.opacity = "0";
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  ta.setSelectionRange(0, 99999);
-  let ok = false;
-  try {
-    ok = document.execCommand("copy");
-  } catch(e) {}
-  document.body.removeChild(ta);
-
-  if (ok) {
-    _pedidoCopiado(colNom, provNom, texto);
-  } else {
-    // Último recurso: mostrar el texto para copiar manualmente
-    prompt("Copiá este texto manualmente (Ctrl+A, Ctrl+C):", texto);
-  }
 }
 
 function _clipFallback(texto) {
@@ -1699,7 +1638,7 @@ function mostrarToast(msg) {
   const t = document.getElementById("toast");
   t.innerText = msg;
   t.classList.add("show");
-  setTimeout(() => t.classList.remove("show"), 2500); // ← de 1800 a 2500
+  setTimeout(() => t.classList.remove("show"), 2500);
 }
 
 // ─────────────────────────────────────────
